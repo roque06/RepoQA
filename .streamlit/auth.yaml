@@ -1,0 +1,17 @@
+credentials:
+  usernames:
+    calidad:
+      name: calidad
+      password: "$2b$12$El2OBLIhji3aaN.867hLK.0Z5RUsqz7n3augUnnnxmwLxfFJ3vDp2"
+    admin:
+      name: Admin
+      password: "$2b$12$kbzc/1Cyaf1KZESbYe2eKuopjT09Krw1oa9.1Qfvtfh3dbIDGnYsC"
+
+cookie:
+  name: "qa_gen_app_cookie"
+  key: "cambia_esta_llave_secreta"  # cambia por una string aleatoria larga
+  expiry_days: 1
+
+preauthorized:
+  emails: []
+
