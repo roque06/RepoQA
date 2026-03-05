@@ -21,8 +21,8 @@ from utils_testrail import (
     obtener_proyectos, obtener_suites, obtener_secciones, enviar_a_testrail
 )
 from utils_gemini import (
-    prompt_refinar_descripcion, enviar_a_gemini, extraer_texto_de_respuesta_gemini,
-    prompt_generar_escenarios_profesionales, obtener_descripcion_refinada
+    enviar_a_gemini, extraer_texto_de_respuesta_gemini,
+    prompt_generar_escenarios_profesionales, limitar_texto_para_gemini
 )
 
 # 3) Login + tamaños independientes
@@ -352,7 +352,7 @@ with tab1:
                     st.error("❌ Falta utils_ingest.consolidate_attachments en el entorno.")
                 else:
                     files = [(f.name, f.read()) for f in uploads]
-                    txt, metas = consolidate_attachments(files, max_chars=200_000)
+                    txt, metas = consolidate_attachments(files, max_chars=60_000)
                     st.session_state["attachments_text"] = txt or ""
                     st.session_state["attachments_meta"] = metas or []
                     st.success(f"Procesado: {len(st.session_state['attachments_meta'])} archivo(s).")
@@ -397,6 +397,104 @@ with tab1:
 
     st.markdown("---")
 
+    def _normalizar_type(valor):
+        t = str(valor).strip().lower()
+        if not t:
+            return "Funcional"
+        if "valid" in t:
+            return "Validacion"
+        if "integr" in t or "api" in t or "servicio" in t or "motor" in t:
+            return "Integracion"
+        if "segur" in t or "permis" in t or "autoriz" in t or "rol" in t:
+            return "Seguridad"
+        if "usab" in t or "ux" in t or "mensaje" in t:
+            return "Usabilidad"
+        if "func" in t or "regla" in t or "negocio" in t or "calculo" in t:
+            return "Funcional"
+        return "Funcional"
+
+    def _normalizar_title(valor):
+        titulo = str(valor or "").strip()
+        if not titulo:
+            return ""
+
+        # Quitar prefijos de enumeracion/labels tecnicos del modelo
+        patrones = [
+            r"^(?:SCENARIO|ESCENARIO|CASO(?:\s+DE\s+PRUEBA)?|TEST\s*CASE|TC)\s*[_:\-#]*\s*[\d\.]*\s*[:\-]*\s*",
+            r"^\s*[\d]+\s*[\)\.\-:]\s*",
+        ]
+        for patron in patrones:
+            titulo = re.sub(patron, "", titulo, flags=re.IGNORECASE).strip()
+
+        # Limpieza final de separadores sobrantes
+        titulo = re.sub(r"^[\s\-\:\._]+", "", titulo).strip()
+        return titulo
+
+    def _normalizar_priority(valor):
+        p = str(valor).strip().lower()
+        if not p:
+            return "Media"
+        if "alta" in p or "high" in p or "critical" in p:
+            return "Alta"
+        if "baja" in p or "low" in p:
+            return "Baja"
+        return "Media"
+
+    def _normalizar_df_generado(df_in):
+        df_out = df_in.copy()
+
+        for c in ["Title", "Preconditions", "Steps", "Expected Result"]:
+            if c in df_out.columns:
+                df_out[c] = df_out[c].apply(lambda x: x.strip() if isinstance(x, str) else x)
+
+        if "Title" in df_out.columns:
+            df_out["Title"] = df_out["Title"].apply(_normalizar_title)
+
+        if "Type" in df_out.columns:
+            df_out["Type"] = df_out["Type"].apply(_normalizar_type)
+        if "Priority" in df_out.columns:
+            df_out["Priority"] = df_out["Priority"].apply(_normalizar_priority)
+
+        requeridas = [c for c in ["Title", "Steps", "Expected Result"] if c in df_out.columns]
+        if requeridas:
+            mask = pd.Series([True] * len(df_out))
+            for c in requeridas:
+                mask = mask & df_out[c].astype(str).str.strip().ne("")
+            df_out = df_out.loc[mask].copy()
+
+        if "Title" in df_out.columns:
+            df_out = df_out.drop_duplicates(subset=["Title"], keep="first")
+
+        return df_out.reset_index(drop=True)
+
+    def _estimar_rango_casos(texto_base: str):
+        txt = (texto_base or "").strip()
+        chars = len(txt)
+
+        if chars < 800:
+            objetivo = 10
+        elif chars < 2_000:
+            objetivo = 14
+        elif chars < 5_000:
+            objetivo = 18
+        elif chars < 10_000:
+            objetivo = 24
+        else:
+            objetivo = 30
+
+        patrones_complejidad = [
+            r"\bvalid", r"\bregla", r"\berror", r"\bpermis", r"\brol",
+            r"\bintegr", r"\bapi", r"\bservicio", r"\bsegur", r"\bl[ií]mite",
+            r"\bmin", r"\bmax", r"\bc[aá]lcul", r"\btasa", r"\bplazo",
+            r"\bgradiente", r"\breestruct", r"\bauditor", r"\bnegativ"
+        ]
+        hits = sum(1 for p in patrones_complejidad if re.search(p, txt, flags=re.IGNORECASE))
+        objetivo += min(8, hits // 2)
+
+        objetivo = max(8, min(36, objetivo))
+        minimo_aceptable = max(6, objetivo - 5)
+        return minimo_aceptable, objetivo
+
     # ---- Generar escenarios ----
     if st.button("Generar escenarios de prueba", key="btn_generar_tab1"):
         # 1) Si se usarán adjuntos y hay archivos subidos pero NO procesados aún, procesarlos aquí automáticamente
@@ -408,7 +506,7 @@ with tab1:
                 consolidate_attachments = None
             if consolidate_attachments:
                 files = [(f.name, f.read()) for f in uploads]
-                txt, metas = consolidate_attachments(files, max_chars=200_000)
+                txt, metas = consolidate_attachments(files, max_chars=60_000)
                 st.session_state["attachments_text"] = txt or ""
                 st.session_state["attachments_meta"] = metas or []
 
@@ -425,27 +523,84 @@ with tab1:
                     st.session_state["texto_funcional"] + ("\n\n" + extra if extra else "")
                 ).strip()
 
-                with st.spinner("🧠 Reestructurando texto..."):
-                    descripcion_refinada = obtener_descripcion_refinada(texto_entrada)
+                with st.spinner("🧠 Preparando contexto para generación..."):
+                    # Evita una llamada LLM adicional para ahorrar cuota.
+                    descripcion_refinada = limitar_texto_para_gemini(texto_entrada, max_chars=5000)
                 st.session_state["descripcion_refinada"] = descripcion_refinada
 
                 with st.spinner("📄 Generando escenarios CSV profesionales..."):
-                    respuesta_csv = enviar_a_gemini(
-                        prompt_generar_escenarios_profesionales(descripcion_refinada)
-                    )
-                    texto_csv_raw = extraer_texto_de_respuesta_gemini(respuesta_csv).strip()
+                    min_casos_aceptables, objetivo_casos = _estimar_rango_casos(texto_entrada)
+                    max_intentos_generacion = 3 if objetivo_casos >= 24 else 2
+                    texto_csv_raw = ""
+                    df = pd.DataFrame()
 
-                # Limpieza y normalización CSV → DF
-                csv_limpio = limpiar_markdown_csv(texto_csv_raw)
-                csv_valido = limpiar_csv_con_formato(csv_limpio, columnas_esperadas=6)
-                csv_corregido = corregir_csv_con_comas(csv_valido, columnas_objetivo=6)
+                    for intento_gen in range(1, max_intentos_generacion + 1):
+                        titulos_previos = []
+                        if not df.empty and "Title" in df.columns:
+                            titulos_previos = df["Title"].astype(str).tolist()
 
-                df = pd.read_csv(io.StringIO(csv_corregido))
-                df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-                df["Steps"] = df["Steps"].apply(normalizar_steps).str.replace(r'\\n', '\n', regex=True)
-                if "Preconditions" in df.columns:
-                    df["Preconditions"] = df["Preconditions"].apply(normalizar_preconditions)
-                df["Estado"] = "Pendiente"
+                        respuesta_csv = enviar_a_gemini(
+                            prompt_generar_escenarios_profesionales(
+                                descripcion_refinada,
+                                contexto_original=texto_entrada,
+                                target_cases=objetivo_casos,
+                                min_cases=min_casos_aceptables,
+                                titulos_excluir=titulos_previos
+                            )
+                        )
+                        texto_csv_raw = extraer_texto_de_respuesta_gemini(respuesta_csv).strip()
+
+                        # Limpieza y normalización CSV → DF
+                        csv_limpio = limpiar_markdown_csv(texto_csv_raw)
+                        csv_valido = limpiar_csv_con_formato(csv_limpio, columnas_esperadas=6)
+                        csv_corregido = corregir_csv_con_comas(csv_valido, columnas_objetivo=6)
+
+                        df_intento = pd.read_csv(io.StringIO(csv_corregido))
+                        df_intento = df_intento.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+                        df_intento = _normalizar_df_generado(df_intento)
+
+                        if "Steps" in df_intento.columns:
+                            df_intento["Steps"] = df_intento["Steps"].apply(normalizar_steps).str.replace(r'\\n', '\n', regex=True)
+                        if "Preconditions" in df_intento.columns:
+                            df_intento["Preconditions"] = df_intento["Preconditions"].apply(normalizar_preconditions)
+                        df_intento["Estado"] = "Pendiente"
+
+                        total_antes = len(df)
+                        if df.empty:
+                            df = df_intento.copy()
+                        else:
+                            if "Title" in df.columns and "Title" in df_intento.columns:
+                                existentes = set(df["Title"].astype(str).str.strip().str.lower())
+                                nuevos = df_intento[
+                                    ~df_intento["Title"].astype(str).str.strip().str.lower().isin(existentes)
+                                ].copy()
+                            else:
+                                nuevos = df_intento.copy()
+                            df = pd.concat([df, nuevos], ignore_index=True)
+                        crecieron = len(df) - total_antes
+
+                        if len(df) >= objetivo_casos:
+                            break
+
+                        if intento_gen > 1 and crecieron == 0:
+                            break
+
+                        if intento_gen < max_intentos_generacion:
+                            st.warning(
+                                f"⚠️ Cobertura parcial ({len(df)} casos acumulados). "
+                                "Reintentando generación para ampliar casos..."
+                            )
+
+                    if len(df) < min_casos_aceptables:
+                        st.warning(
+                            f"⚠️ Se generaron {len(df)} casos tras {max_intentos_generacion} intentos. "
+                            f"Rango esperado por contexto: {min_casos_aceptables}-{objetivo_casos}."
+                        )
+                    elif len(df) < objetivo_casos:
+                        st.info(
+                            f"ℹ️ Se generaron {len(df)} casos reales según el contexto disponible. "
+                            f"Objetivo estimado: {objetivo_casos}."
+                        )
 
                 st.session_state.df_editable = df
                 st.session_state.generado = True
