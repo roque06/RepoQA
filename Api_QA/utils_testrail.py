@@ -1,16 +1,15 @@
-import requests
-import pandas as pd
-import streamlit as st
 import re
+
+import pandas as pd
+import requests
+import streamlit as st
 
 # 🔐 Obtener credenciales desde .streamlit/secrets.toml
 TESTRAIL_DOMAIN = st.secrets["testrail_url"]
 TESTRAIL_USER = st.secrets["testrail_email"]
 TESTRAIL_API_KEY = st.secrets["testrail_api_key"]
 
-HEADERS = {
-    "Content-Type": "application/json"
-}
+HEADERS = {"Content-Type": "application/json"}
 AUTH = (TESTRAIL_USER, TESTRAIL_API_KEY)
 
 # 🧩 Obtener lista de proyectos
@@ -45,20 +44,24 @@ def obtener_secciones(project_id, suite_id):
     except Exception as e:
         st.error(f"❌ Error al obtener secciones: {e}")
         return None
-    
-    
-
-
-
-TESTRAIL_DOMAIN = st.secrets["testrail_url"]
-TESTRAIL_USER = st.secrets["testrail_email"]
-TESTRAIL_API_KEY = st.secrets["testrail_api_key"]
-
-HEADERS = {"Content-Type": "application/json"}
-AUTH = (TESTRAIL_USER, TESTRAIL_API_KEY)
 
 def _s(x):  # coerce a string
     return "" if x is None else str(x).strip()
+
+def _refs_desde_fila(fila) -> str:
+    """
+    Devuelve el campo refs en el formato esperado por TestRail.
+    - Acepta columnas opcionales como Refs/Reference/References.
+    - Siempre retorna string para evitar errores server-side por clave ausente.
+    """
+    for columna in ("refs", "Refs", "Reference", "References"):
+        valor = fila.get(columna)
+        if pd.isna(valor):
+            continue
+        texto = _s(valor)
+        if texto:
+            return texto
+    return ""
 
 def _oraculo_breve_sin_duplicar(title: str, steps: str, expected: str) -> str:
     """
@@ -106,6 +109,7 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
 
         datos = {
             "title": title,
+            "refs": _refs_desde_fila(fila),
             "custom_preconds": pre,
             "custom_steps": steps,
             "custom_expected": expected,
