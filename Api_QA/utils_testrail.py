@@ -63,6 +63,37 @@ def _refs_desde_fila(fila) -> str:
             return texto
     return ""
 
+def _construir_payload_caso(fila) -> dict:
+    title = _s(fila.get("Title", "Caso sin título"))
+    pre = _s(fila.get("Preconditions", ""))
+    steps = _s(fila.get("Steps", ""))
+    expected = _s(fila.get("Expected Result", ""))
+    tipo = _s(fila.get("Type", "Funcional"))
+    prio = _s(fila.get("Priority", "Media"))
+
+    # Oráculo breve y distinto del expected
+    oracle = _oraculo_breve_sin_duplicar(title, steps, expected)
+    if not oracle:
+        oracle = "Regla: validar condición de aceptación sin duplicar el resultado esperado."
+
+    return {
+        "title": title,
+        "refs": _refs_desde_fila(fila),
+        "custom_preconds": pre,
+        "custom_steps": steps,
+        "custom_expected": expected,
+        "custom_type": tipo,
+        "custom_priority": prio,
+        "custom_case_oracle": oracle,  # <- aquí el campo obligatorio
+    }
+
+def _post_case(url: str, datos: dict):
+    return requests.post(url, headers=HEADERS, auth=AUTH, json=datos, timeout=30)
+
+def _es_error_refs_faltante(response) -> bool:
+    texto = _s(response.text).replace('\\"', '"')
+    return response.status_code == 500 and 'Undefined array key "refs"' in texto
+
 def _oraculo_breve_sin_duplicar(title: str, steps: str, expected: str) -> str:
     """
     Genera un oráculo corto (regla verificable) que NO sea igual al Expected.
@@ -95,31 +126,14 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     exitosos, errores = 0, []
 
     for i, fila in dataframe.iterrows():
-        title = _s(fila.get("Title", "Caso sin título"))
-        pre = _s(fila.get("Preconditions", ""))
-        steps = _s(fila.get("Steps", ""))
-        expected = _s(fila.get("Expected Result", ""))
-        tipo = _s(fila.get("Type", "Funcional"))
-        prio = _s(fila.get("Priority", "Media"))
-
-        # Oráculo breve y distinto del expected
-        oracle = _oraculo_breve_sin_duplicar(title, steps, expected)
-        if not oracle:
-            oracle = "Regla: validar condición de aceptación sin duplicar el resultado esperado."
-
-        datos = {
-            "title": title,
-            "refs": _refs_desde_fila(fila),
-            "custom_preconds": pre,
-            "custom_steps": steps,
-            "custom_expected": expected,
-            "custom_type": tipo,
-            "custom_priority": prio,
-            "custom_case_oracle": oracle,  # <- aquí el campo obligatorio
-        }
+        datos = _construir_payload_caso(fila)
 
         try:
-            r = requests.post(url, headers=HEADERS, auth=AUTH, json=datos)
+            r = _post_case(url, datos)
+            if _es_error_refs_faltante(r) and not datos["refs"]:
+                # Compatibilidad defensiva: algunos gateways descartan strings vacíos.
+                datos["refs"] = " "
+                r = _post_case(url, datos)
             if r.status_code in (200, 201):
                 exitosos += 1
             else:

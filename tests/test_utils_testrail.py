@@ -57,6 +57,42 @@ class TestUtilsTestRail(unittest.TestCase):
         self.assertIn("refs", enviado)
         self.assertEqual(enviado["refs"], "")
 
+    def test_reintenta_con_espacio_si_backend_reporta_refs_faltante(self):
+        module = load_utils_testrail()
+        dataframe = pd.DataFrame(
+            [
+                {
+                    "Title": "Validar alta de usuario",
+                    "Preconditions": "Administrador autenticado",
+                    "Steps": "Completar formulario y guardar",
+                    "Expected Result": "El usuario se crea correctamente",
+                    "Type": "Funcional",
+                    "Priority": "Alta",
+                }
+            ]
+        )
+
+        respuesta_error = types.SimpleNamespace(
+            status_code=500,
+            text='{"error":"Undefined array key \\"refs\\""}',
+        )
+        respuesta_ok = types.SimpleNamespace(status_code=201, text="")
+        payloads = []
+
+        def side_effect(*args, **kwargs):
+            payloads.append(dict(kwargs["json"]))
+            return [respuesta_error, respuesta_ok][len(payloads) - 1]
+
+        with patch.object(module.requests, "post", side_effect=side_effect) as mock_post:
+            resultado = module.enviar_a_testrail(999, dataframe)
+
+        self.assertTrue(resultado["exito"])
+        self.assertEqual(mock_post.call_count, 2)
+        primer_payload = payloads[0]
+        segundo_payload = payloads[1]
+        self.assertEqual(primer_payload["refs"], "")
+        self.assertEqual(segundo_payload["refs"], " ")
+
     def test_refs_toma_valor_desde_columna_opcional(self):
         module = load_utils_testrail()
         dataframe = pd.DataFrame(
