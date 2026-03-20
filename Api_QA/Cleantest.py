@@ -655,11 +655,16 @@ with tab1:
 
                 st.session_state.df_editable = df
                 st.session_state.generado = True
+                origen_generacion = (
+                    "Generación inicial (con adjuntos)"
+                    if modo_ingreso == "Documento" and bool(st.session_state.get("attachments_text"))
+                    else "Generación inicial"
+                )
 
                 st.session_state["historial_generaciones"].append({
                     "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "fuente": "QA",
-                    "origen": "Generación inicial (con adjuntos)" if extra else "Generación inicial",
+                    "origen": origen_generacion,
                     "descripcion": descripcion_refinada,
                     "escenarios": df.copy()
                 })
