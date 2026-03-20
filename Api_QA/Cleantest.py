@@ -306,6 +306,8 @@ st.session_state.setdefault("generado", False)
 st.session_state.setdefault("descripcion_refinada", "")
 st.session_state.setdefault("historial_generaciones", [])
 st.session_state.setdefault("tab1_uploader_nonce", 0)
+st.session_state.setdefault("tab1_input_mode", "Texto")
+st.session_state.setdefault("tab1_last_upload_signature", ())
 
 with tab1:
     st.subheader("📌 Generar escenarios de prueba automáticamente")
@@ -316,51 +318,91 @@ with tab1:
     st.session_state.setdefault("use_attachments", True)
     st.session_state.setdefault("tab1_uploader_nonce", 0)
     st.session_state.setdefault("tab1_do_reset", False)
+    st.session_state.setdefault("tab1_input_mode", "Texto")
+    st.session_state.setdefault("tab1_last_upload_signature", ())
 
-    # ---- TextArea de entrada (NO sobrescribir session_state luego) ----
-    texto_funcional = st.text_area(
-        "Texto funcional original",
-        value=st.session_state.get("texto_funcional", ""),
-        height=250,
-        key="texto_funcional"
-    )  # ← no reasignes st.session_state["texto_funcional"] más abajo
-
-    # ---- Adjuntar documentos e imágenes ----
-    st.markdown("### Adjuntar documentos e imágenes (opcional)")
-    uploads = st.file_uploader(
-        "PDF, DOCX, TXT, CSV, XLSX, PNG, JPG, WEBP, TIFF",
-        type=["pdf","docx","txt","csv","xlsx","png","jpg","jpeg","webp","tiff"],
-        accept_multiple_files=True,
-        key=f"tab1_uploader_{st.session_state['tab1_uploader_nonce']}"
+    st.markdown("### ¿Cómo quieres ingresar la información base?")
+    modo_ingreso = st.radio(
+        "Selecciona el origen del contexto",
+        options=["Texto", "Documento"],
+        horizontal=True,
+        key="tab1_input_mode",
+        label_visibility="collapsed",
+        help="Elige Texto para escribir el requerimiento manualmente o Documento para cargar archivos y procesarlos automáticamente.",
     )
 
-    colA, colB = st.columns([1,1])
-    with colA:
-        st.checkbox(
-            "Usar adjuntos para generar",
-            key="use_attachments",
-            help="Si está activo, el texto extraído de los archivos se enviará al generador."
+    usar_adj = modo_ingreso == "Documento"
+    st.session_state["use_attachments"] = usar_adj
+
+    if modo_ingreso == "Texto":
+        st.info("✍️ Escribe el contexto funcional y luego genera los escenarios.")
+    else:
+        st.info("📄 Carga uno o más archivos. Se procesarán automáticamente apenas se adjunten.")
+
+    def _procesar_uploads_tab1(archivos_subidos):
+        if not archivos_subidos:
+            st.session_state["attachments_text"] = ""
+            st.session_state["attachments_meta"] = []
+            st.session_state["tab1_last_upload_signature"] = ()
+            return False
+        try:
+            from utils_ingest import consolidate_attachments
+        except Exception:
+            consolidate_attachments = None
+
+        if consolidate_attachments is None:
+            st.error("❌ Falta utils_ingest.consolidate_attachments en el entorno.")
+            return False
+
+        files = [(f.name, f.getvalue()) for f in archivos_subidos]
+        txt, metas = consolidate_attachments(files, max_chars=60_000)
+        st.session_state["attachments_text"] = txt or ""
+        st.session_state["attachments_meta"] = metas or []
+        st.session_state["tab1_last_upload_signature"] = tuple(
+            (f.name, len(f.getvalue())) for f in archivos_subidos
         )
-    with colB:
-        if st.button("Procesar adjuntos", key="btn_procesar_adjuntos"):
-            if uploads:
-                try:
-                    from utils_ingest import consolidate_attachments
-                except Exception:
-                    consolidate_attachments = None
-                if consolidate_attachments is None:
-                    st.error("❌ Falta utils_ingest.consolidate_attachments en el entorno.")
-                else:
-                    files = [(f.name, f.read()) for f in uploads]
-                    txt, metas = consolidate_attachments(files, max_chars=60_000)
-                    st.session_state["attachments_text"] = txt or ""
-                    st.session_state["attachments_meta"] = metas or []
+        return True
+
+    uploads = []
+    if modo_ingreso == "Texto":
+        # ---- TextArea de entrada (NO sobrescribir session_state luego) ----
+        texto_funcional = st.text_area(
+            "Texto funcional original",
+            value=st.session_state.get("texto_funcional", ""),
+            height=250,
+            key="texto_funcional"
+        )  # ← no reasignes st.session_state["texto_funcional"] más abajo
+    else:
+        st.markdown("### Adjuntar documentos e imágenes")
+        uploads = st.file_uploader(
+            "PDF, DOCX, TXT, CSV, XLSX, PNG, JPG, WEBP, TIFF",
+            type=["pdf","docx","txt","csv","xlsx","png","jpg","jpeg","webp","tiff"],
+            accept_multiple_files=True,
+            key=f"tab1_uploader_{st.session_state['tab1_uploader_nonce']}"
+        )
+
+        firmas_actuales = tuple((f.name, len(f.getvalue())) for f in uploads) if uploads else ()
+        if uploads and firmas_actuales != st.session_state.get("tab1_last_upload_signature", ()):
+            with st.spinner("📄 Procesando adjuntos automáticamente..."):
+                if _procesar_uploads_tab1(uploads):
                     st.success(f"Procesado: {len(st.session_state['attachments_meta'])} archivo(s).")
-            else:
-                st.info("No seleccionaste archivos.")
+        elif not uploads and st.session_state.get("tab1_last_upload_signature"):
+            _procesar_uploads_tab1([])
+
+        colA, colB = st.columns([1, 1])
+        with colA:
+            st.caption("Los adjuntos procesados se usarán automáticamente para generar los escenarios.")
+        with colB:
+            if st.button("🔄 Reprocesar documentos", key="btn_procesar_adjuntos"):
+                if uploads:
+                    with st.spinner("📄 Reprocesando adjuntos..."):
+                        if _procesar_uploads_tab1(uploads):
+                            st.success(f"Procesado: {len(st.session_state['attachments_meta'])} archivo(s).")
+                else:
+                    st.info("No seleccionaste archivos.")
 
     # ---- Metadatos de adjuntos (si existen) ----
-    if st.session_state["attachments_meta"]:
+    if modo_ingreso == "Documento" and st.session_state["attachments_meta"]:
         with st.expander("Fuentes procesadas", expanded=False):
             for m in st.session_state["attachments_meta"]:
                 st.caption(
@@ -369,31 +411,34 @@ with tab1:
                 )
 
     # ---- Preview paginado (colapsable) ----
-    st.markdown("### Preview paginado del documento")
-    if uploads:
-        for i, f in enumerate(uploads, start=1):
-            bytes_f = f.getvalue() if hasattr(f, "getvalue") else f.read()
+    if modo_ingreso == "Documento":
+        st.markdown("### Preview paginado del documento")
+        if uploads:
+            for i, f in enumerate(uploads, start=1):
+                bytes_f = f.getvalue() if hasattr(f, "getvalue") else f.read()
+                preview_document_paginado_inline(
+                    file_label=f"Archivo {i}: {f.name}",
+                    file_name=f.name,
+                    file_bytes=bytes_f,
+                    tipo=("pdf" if f.name.lower().endswith(".pdf") else "texto"),
+                    key_ns="t1",
+                    collapsible=True,
+                    expanded=False
+                )
+        elif st.session_state.get("attachments_text"):
             preview_document_paginado_inline(
-                file_label=f"Archivo {i}: {f.name}",
-                file_name=f.name,
-                file_bytes=bytes_f,
-                tipo=("pdf" if f.name.lower().endswith(".pdf") else "texto"),
+                file_label="Texto consolidado de adjuntos",
+                file_name="adjuntos.txt",
+                text_extraido=st.session_state["attachments_text"],
+                tipo="texto",
                 key_ns="t1",
                 collapsible=True,
                 expanded=False
             )
-    elif st.session_state.get("attachments_text"):
-        preview_document_paginado_inline(
-            file_label="Texto consolidado de adjuntos",
-            file_name="adjuntos.txt",
-            text_extraido=st.session_state["attachments_text"],
-            tipo="texto",
-            key_ns="t1",
-            collapsible=True,
-            expanded=False
-        )
+        else:
+            st.caption("Sube archivos para ver aquí el preview paginado automáticamente.")
     else:
-        st.caption("Sube archivos y/o presiona **Procesar adjuntos** para ver aquí el preview paginado.")
+        st.caption("Selecciona la opción **Documento** si prefieres generar escenarios a partir de archivos.")
 
     st.markdown("---")
 
@@ -497,31 +542,25 @@ with tab1:
 
     # ---- Generar escenarios ----
     if st.button("Generar escenarios de prueba", key="btn_generar_tab1"):
-        # 1) Si se usarán adjuntos y hay archivos subidos pero NO procesados aún, procesarlos aquí automáticamente
-        usar_adj = st.session_state.get("use_attachments", True)
+        # 1) Si el modo documento tiene archivos y aún no se han consolidado, procesarlos automáticamente.
         if usar_adj and uploads and not st.session_state.get("attachments_text"):
-            try:
-                from utils_ingest import consolidate_attachments
-            except Exception:
-                consolidate_attachments = None
-            if consolidate_attachments:
-                files = [(f.name, f.read()) for f in uploads]
-                txt, metas = consolidate_attachments(files, max_chars=60_000)
-                st.session_state["attachments_text"] = txt or ""
-                st.session_state["attachments_meta"] = metas or []
+            with st.spinner("📄 Procesando adjuntos antes de generar..."):
+                _procesar_uploads_tab1(uploads)
 
-        # 2) Validar: solo advertir si NO hay NI texto funcional NI adjuntos procesados
+        # 2) Validar segun el modo elegido
         tiene_texto = bool(st.session_state["texto_funcional"].strip())
         tiene_adjuntos = bool(st.session_state.get("attachments_text"))
-        if not (tiene_texto or (usar_adj and tiene_adjuntos)):
-            st.warning("⚠️ Ingresa el texto funcional o adjunta archivos y procésalos primero.")
+        if modo_ingreso == "Texto" and not tiene_texto:
+            st.warning("⚠️ Ingresa el texto funcional para generar los escenarios.")
+        elif modo_ingreso == "Documento" and not tiene_adjuntos:
+            st.warning("⚠️ Adjunta al menos un documento válido para generar los escenarios.")
         else:
             try:
-                # Construir entrada combinada sin tocar el text_area
-                extra = st.session_state.get("attachments_text", "") if usar_adj else ""
-                texto_entrada = (
-                    st.session_state["texto_funcional"] + ("\n\n" + extra if extra else "")
-                ).strip()
+                # Construir entrada segun el modo seleccionado
+                if modo_ingreso == "Documento":
+                    texto_entrada = st.session_state.get("attachments_text", "").strip()
+                else:
+                    texto_entrada = st.session_state["texto_funcional"].strip()
 
                 with st.spinner("🧠 Preparando contexto para generación..."):
                     # Evita una llamada LLM adicional para ahorrar cuota.
