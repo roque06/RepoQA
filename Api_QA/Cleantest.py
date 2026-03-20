@@ -306,7 +306,7 @@ st.session_state.setdefault("generado", False)
 st.session_state.setdefault("descripcion_refinada", "")
 st.session_state.setdefault("historial_generaciones", [])
 st.session_state.setdefault("tab1_uploader_nonce", 0)
-st.session_state.setdefault("tab1_input_mode", "Texto")
+st.session_state.setdefault("tab1_input_mode", None)
 st.session_state.setdefault("tab1_last_upload_signature", ())
 
 with tab1:
@@ -318,16 +318,16 @@ with tab1:
     st.session_state.setdefault("use_attachments", True)
     st.session_state.setdefault("tab1_uploader_nonce", 0)
     st.session_state.setdefault("tab1_do_reset", False)
-    st.session_state.setdefault("tab1_input_mode", "Texto")
+    st.session_state.setdefault("tab1_input_mode", None)
     st.session_state.setdefault("tab1_last_upload_signature", ())
 
     st.markdown("### ¿Cómo quieres ingresar la información base?")
-    modo_ingreso = st.radio(
+    modo_ingreso = st.selectbox(
         "Selecciona el origen del contexto",
         options=["Texto", "Documento"],
-        horizontal=True,
+        index=None,
+        placeholder="Selecciona una opción",
         key="tab1_input_mode",
-        label_visibility="collapsed",
         help="Elige Texto para escribir el requerimiento manualmente o Documento para cargar archivos y procesarlos automáticamente.",
     )
 
@@ -336,8 +336,10 @@ with tab1:
 
     if modo_ingreso == "Texto":
         st.info("✍️ Escribe el contexto funcional y luego genera los escenarios.")
-    else:
+    elif modo_ingreso == "Documento":
         st.info("📄 Carga uno o más archivos. Se procesarán automáticamente apenas se adjunten.")
+    else:
+        st.caption("Primero selecciona si deseas trabajar con texto o con documento.")
 
     def _procesar_uploads_tab1(archivos_subidos):
         if not archivos_subidos:
@@ -372,7 +374,7 @@ with tab1:
             height=250,
             key="texto_funcional"
         )  # ← no reasignes st.session_state["texto_funcional"] más abajo
-    else:
+    elif modo_ingreso == "Documento":
         st.markdown("### Adjuntar documentos e imágenes")
         uploads = st.file_uploader(
             "PDF, DOCX, TXT, CSV, XLSX, PNG, JPG, WEBP, TIFF",
@@ -437,7 +439,7 @@ with tab1:
             )
         else:
             st.caption("Sube archivos para ver aquí el preview paginado automáticamente.")
-    else:
+    elif modo_ingreso == "Texto":
         st.caption("Selecciona la opción **Documento** si prefieres generar escenarios a partir de archivos.")
 
     st.markdown("---")
@@ -540,16 +542,26 @@ with tab1:
         minimo_aceptable = max(6, objetivo - 5)
         return minimo_aceptable, objetivo
 
+    tiene_texto = bool(st.session_state["texto_funcional"].strip())
+    tiene_adjuntos = bool(st.session_state.get("attachments_text"))
+    boton_habilitado = (
+        (modo_ingreso == "Texto" and tiene_texto) or
+        (modo_ingreso == "Documento" and tiene_adjuntos)
+    )
+
     # ---- Generar escenarios ----
-    if st.button("Generar escenarios de prueba", key="btn_generar_tab1"):
+    if st.button(
+        "Generar escenarios de prueba",
+        key="btn_generar_tab1",
+        disabled=not boton_habilitado,
+        help="Se habilita cuando ingresas texto o cuando se procesa al menos un documento."
+    ):
         # 1) Si el modo documento tiene archivos y aún no se han consolidado, procesarlos automáticamente.
         if usar_adj and uploads and not st.session_state.get("attachments_text"):
             with st.spinner("📄 Procesando adjuntos antes de generar..."):
                 _procesar_uploads_tab1(uploads)
 
         # 2) Validar segun el modo elegido
-        tiene_texto = bool(st.session_state["texto_funcional"].strip())
-        tiene_adjuntos = bool(st.session_state.get("attachments_text"))
         if modo_ingreso == "Texto" and not tiene_texto:
             st.warning("⚠️ Ingresa el texto funcional para generar los escenarios.")
         elif modo_ingreso == "Documento" and not tiene_adjuntos:
