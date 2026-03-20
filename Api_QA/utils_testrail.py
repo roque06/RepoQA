@@ -1,16 +1,15 @@
-import requests
-import pandas as pd
-import streamlit as st
 import re
+
+import pandas as pd
+import requests
+import streamlit as st
 
 # 🔐 Obtener credenciales desde .streamlit/secrets.toml
 TESTRAIL_DOMAIN = st.secrets["testrail_url"]
 TESTRAIL_USER = st.secrets["testrail_email"]
 TESTRAIL_API_KEY = st.secrets["testrail_api_key"]
 
-HEADERS = {
-    "Content-Type": "application/json"
-}
+HEADERS = {"Content-Type": "application/json"}
 AUTH = (TESTRAIL_USER, TESTRAIL_API_KEY)
 
 # 🧩 Obtener lista de proyectos
@@ -45,20 +44,55 @@ def obtener_secciones(project_id, suite_id):
     except Exception as e:
         st.error(f"❌ Error al obtener secciones: {e}")
         return None
-    
-    
-
-
-
-TESTRAIL_DOMAIN = st.secrets["testrail_url"]
-TESTRAIL_USER = st.secrets["testrail_email"]
-TESTRAIL_API_KEY = st.secrets["testrail_api_key"]
-
-HEADERS = {"Content-Type": "application/json"}
-AUTH = (TESTRAIL_USER, TESTRAIL_API_KEY)
 
 def _s(x):  # coerce a string
     return "" if x is None else str(x).strip()
+
+def _refs_desde_fila(fila) -> str:
+    """
+    Devuelve el campo refs en el formato esperado por TestRail.
+    - Acepta columnas opcionales como Refs/Reference/References.
+    - Siempre retorna string para evitar errores server-side por clave ausente.
+    """
+    for columna in ("refs", "Refs", "Reference", "References"):
+        valor = fila.get(columna)
+        if pd.isna(valor):
+            continue
+        texto = _s(valor)
+        if texto:
+            return texto
+    return ""
+
+def _construir_payload_caso(fila) -> dict:
+    title = _s(fila.get("Title", "Caso sin título"))
+    pre = _s(fila.get("Preconditions", ""))
+    steps = _s(fila.get("Steps", ""))
+    expected = _s(fila.get("Expected Result", ""))
+    tipo = _s(fila.get("Type", "Funcional"))
+    prio = _s(fila.get("Priority", "Media"))
+
+    # Oráculo breve y distinto del expected
+    oracle = _oraculo_breve_sin_duplicar(title, steps, expected)
+    if not oracle:
+        oracle = "Regla: validar condición de aceptación sin duplicar el resultado esperado."
+
+    return {
+        "title": title,
+        "refs": _refs_desde_fila(fila),
+        "custom_preconds": pre,
+        "custom_steps": steps,
+        "custom_expected": expected,
+        "custom_type": tipo,
+        "custom_priority": prio,
+        "custom_case_oracle": oracle,  # <- aquí el campo obligatorio
+    }
+
+def _post_case(url: str, datos: dict):
+    return requests.post(url, headers=HEADERS, auth=AUTH, json=datos, timeout=30)
+
+def _es_error_refs_faltante(response) -> bool:
+    texto = _s(response.text).replace('\\"', '"')
+    return response.status_code == 500 and 'Undefined array key "refs"' in texto
 
 def _oraculo_breve_sin_duplicar(title: str, steps: str, expected: str) -> str:
     """
@@ -92,30 +126,14 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     exitosos, errores = 0, []
 
     for i, fila in dataframe.iterrows():
-        title = _s(fila.get("Title", "Caso sin título"))
-        pre = _s(fila.get("Preconditions", ""))
-        steps = _s(fila.get("Steps", ""))
-        expected = _s(fila.get("Expected Result", ""))
-        tipo = _s(fila.get("Type", "Funcional"))
-        prio = _s(fila.get("Priority", "Media"))
-
-        # Oráculo breve y distinto del expected
-        oracle = _oraculo_breve_sin_duplicar(title, steps, expected)
-        if not oracle:
-            oracle = "Regla: validar condición de aceptación sin duplicar el resultado esperado."
-
-        datos = {
-            "title": title,
-            "custom_preconds": pre,
-            "custom_steps": steps,
-            "custom_expected": expected,
-            "custom_type": tipo,
-            "custom_priority": prio,
-            "custom_case_oracle": oracle,  # <- aquí el campo obligatorio
-        }
+        datos = _construir_payload_caso(fila)
 
         try:
-            r = requests.post(url, headers=HEADERS, auth=AUTH, json=datos)
+            r = _post_case(url, datos)
+            if _es_error_refs_faltante(r) and not datos["refs"]:
+                # Compatibilidad defensiva: algunos gateways descartan strings vacíos.
+                datos["refs"] = " "
+                r = _post_case(url, datos)
             if r.status_code in (200, 201):
                 exitosos += 1
             else:
