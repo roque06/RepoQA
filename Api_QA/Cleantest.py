@@ -370,10 +370,9 @@ with tab1:
         # ---- TextArea de entrada (NO sobrescribir session_state luego) ----
         texto_funcional = st.text_area(
             "Texto funcional original",
-            value=st.session_state.get("texto_funcional", ""),
             height=250,
             key="texto_funcional"
-        )  # ← no reasignes st.session_state["texto_funcional"] más abajo
+        )
     elif modo_ingreso == "Documento":
         st.markdown("### Adjuntar documentos e imágenes")
         uploads = st.file_uploader(
