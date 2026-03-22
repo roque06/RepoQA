@@ -213,20 +213,6 @@ div[data-testid="stForm"] form {{
 }}
 div[data-testid="stFormSubmitButton"] {{
     width: 100% !important;
-    display: flex !important;
-    justify-content: center !important;
-}}
-div[data-testid="stFormSubmitButton"] > div {{
-    width: 100% !important;
-    display: flex !important;
-    justify-content: center !important;
-}}
-div[data-testid="stFormSubmitButton"] > button,
-div[data-testid="stFormSubmitButton"] > div > button {{
-    width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
 }}
 
 /* ── Inputs ────────────────────────────────────────── */
@@ -261,7 +247,7 @@ div[data-testid="stFormSubmitButton"] button {{
     max-width:      100% !important;
     display:        flex !important;
     align-items:    center !important;
-    justify-content:center !important;
+    justify-content: center !important;
     background:     #ef4444 !important;
     color:          #ffffff !important;
     border:         none !important;
@@ -272,6 +258,8 @@ div[data-testid="stFormSubmitButton"] button {{
     letter-spacing: .2px !important;
     box-shadow:     0 4px 14px rgba(239,68,68,.35) !important;
     margin-top:     8px !important;
+    margin-left:    auto !important;
+    margin-right:   auto !important;
     transition:     all .2s !important;
     cursor:         pointer !important;
 }}
