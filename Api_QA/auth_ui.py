@@ -160,9 +160,13 @@ class SecureShell:
         st.markdown(
             f"""
 <style>
+/* ── Fondo y header Streamlit ──────────────────────── */
 [data-testid="stAppViewContainer"] {{ background: #f8fafc !important; }}
 [data-testid="stHeader"]           {{ background: transparent !important; }}
+[data-testid="stSidebar"]          {{ display: none !important; }}
+[data-testid="stToolbar"]          {{ right: .5rem; }}
 
+/* ── Card central ──────────────────────────────────── */
 .block-container {{
     max-width: {self.login_page_width}px;
     margin: 10vh auto 0 auto;
@@ -173,40 +177,50 @@ class SecureShell:
     border: 1px solid #e5e7eb;
 }}
 
-[data-testid="stTextInput"] [data-baseweb="input"] {{
-    background: #ffffff !important; border: 1.5px solid #e5e7eb !important;
-    border-radius: 8px !important; box-shadow: 0 1px 3px rgba(0,0,0,.04) !important;
-    transition: border-color .18s, box-shadow .18s !important;
-}}
-[data-testid="stTextInput"] [data-baseweb="input"]:focus-within {{
-    border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.1) !important;
-}}
+/* ── Inputs ────────────────────────────────────────── */
 [data-testid="stTextInput"] input {{
-    font-size: 14px !important; color: #1e293b !important;
-    background: transparent !important;
+    background:    #ffffff !important;
+    border:        1.5px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    font-size:     14px !important;
+    color:         #1e293b !important;
+    padding:       10px 12px !important;
+    box-shadow:    0 1px 3px rgba(0,0,0,.04) !important;
+    transition:    border-color .18s, box-shadow .18s !important;
+}}
+[data-testid="stTextInput"] input:focus {{
+    border-color: #ef4444 !important;
+    box-shadow:   0 0 0 3px rgba(239,68,68,.1) !important;
+    outline:      none !important;
 }}
 [data-testid="stTextInput"] label {{
-    font-weight: 600 !important; font-size: 13px !important; color: #374151 !important;
+    font-weight: 600 !important;
+    font-size:   13px !important;
+    color:       #374151 !important;
 }}
 [data-testid="InputInstructions"] {{ display: none !important; }}
 
-[data-testid="stFormSubmitButton"] button {{
-    width: 100% !important; background: #ef4444 !important;
-    color: #ffffff !important; border: none !important;
-    border-radius: 10px !important; padding: 14px 24px !important;
-    font-size: 15px !important; font-weight: 700 !important;
+/* ── Botón Ingresar — via clase ancla, sin data-testid ─ */
+.login-btn-anchor ~ div button {{
+    width:          100% !important;
+    background:     #ef4444 !important;
+    color:          #ffffff !important;
+    border:         none !important;
+    border-radius:  10px !important;
+    padding:        14px 24px !important;
+    font-size:      15px !important;
+    font-weight:    700 !important;
     letter-spacing: .2px !important;
-    box-shadow: 0 4px 14px rgba(239,68,68,.35) !important;
-    margin-top: 8px !important; transition: all .2s !important; cursor: pointer !important;
+    box-shadow:     0 4px 14px rgba(239,68,68,.35) !important;
+    margin-top:     8px !important;
+    transition:     all .2s !important;
+    cursor:         pointer !important;
 }}
-[data-testid="stFormSubmitButton"] button:hover {{
-    background: #dc2626 !important;
-    box-shadow: 0 6px 20px rgba(239,68,68,.45) !important;
-    transform: translateY(-1px) !important;
+.login-btn-anchor ~ div button:hover {{
+    background:  #dc2626 !important;
+    box-shadow:  0 6px 20px rgba(239,68,68,.45) !important;
+    transform:   translateY(-1px) !important;
 }}
-
-[data-testid="stSidebar"] {{ display: none !important; }}
-[data-testid="stToolbar"]  {{ right: .5rem; }}
 </style>""",
             unsafe_allow_html=True,
         )
@@ -275,13 +289,19 @@ class SecureShell:
         st.markdown(
             """
             <div style="text-align:center;margin-bottom:28px">
-                <div style="font-size:36px;margin-bottom:10px">🔒</div>
-                <div style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.3px">
-                    Acceso al sistema
-                </div>
-                <div style="font-size:13.5px;color:#6b7280;margin-top:6px">
-                    Ingresa tus credenciales para continuar
-                </div>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="#f59e0b"
+                   xmlns="http://www.w3.org/2000/svg" style="margin-bottom:10px">
+                <path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12
+                         a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3
+                         8V7a3 3 0 016 0v3H9z"/>
+              </svg>
+              <div style="font-size:22px;font-weight:800;color:#0f172a;
+                          letter-spacing:-.3px;margin-top:4px">
+                Acceso al sistema
+              </div>
+              <div style="font-size:13.5px;color:#6b7280;margin-top:6px">
+                Ingresa tus credenciales para continuar
+              </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -291,6 +311,8 @@ class SecureShell:
             u = st.text_input("Usuario",    key="u")
             p = st.text_input("Contraseña", type="password", key="p")
             st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
+            # Ancla para apuntar el CSS al botón submit sin usar data-testid
+            st.markdown('<span class="login-btn-anchor"></span>', unsafe_allow_html=True)
             submitted = st.form_submit_button("Ingresar")
 
         if submitted:
@@ -320,7 +342,7 @@ class SecureShell:
             )
         with _col_btn:
             st.markdown('<span class="logout-btn-anchor"></span>', unsafe_allow_html=True)
-            if st.button("🔒 Cerrar sesión", key="_logout_btn"):
+            if st.button("Cerrar sesión", key="_logout_btn"):
                 self._delete_session()
                 for k in ("logged_in", "user", "display_name"):
                     st.session_state.pop(k, None)
