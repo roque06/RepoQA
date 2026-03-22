@@ -81,8 +81,6 @@ class SecureShell:
 
     def login(self) -> bool:
         """Aplica estilos según estado y renderiza login si hace falta."""
-        self._logout_if_requested()
-
         st.session_state.setdefault("logged_in",    False)
         st.session_state.setdefault("user",         None)
         st.session_state.setdefault("display_name", None)
@@ -95,7 +93,6 @@ class SecureShell:
             self._apply_styles_app()
             self.user         = st.session_state["user"]
             self.display_name = st.session_state["display_name"]
-            self._render_logout_link()
             return True
 
         self._apply_styles_login()
@@ -225,13 +222,51 @@ class SecureShell:
   [data-testid="stSidebar"] {{ display: none !important; }}
   [data-testid="stToolbar"]  {{ right: .5rem; }}
 
-  .logout-fixed {{
-    position: fixed; top: {self.logout_top}px; right: {self.logout_right}px;
-    z-index: 9999; background: #fff; color: #0f1116; text-decoration: none;
-    border: 1px solid #e5e7eb; border-radius: .5rem; padding: .35rem .7rem;
-    font-size: .92rem; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  /* ── App header ─────────────────────────────────── */
+  .app-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 0 .75rem 0;
+    margin-bottom: .25rem;
+    border-bottom: 1px solid #f1f5f9;
   }}
-  .logout-fixed:hover {{ background: #f8f9fb; border-color: #d1d5db; }}
+  .app-header-title {{
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.3px;
+    margin: 0;
+    line-height: 1.2;
+  }}
+
+  /* ── Botón Cerrar sesión ─────────────────────────── */
+  .logout-btn-anchor ~ [data-testid="stButton"] button {{
+    background:    #ffffff !important;
+    color:         #374151 !important;
+    border:        1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    padding:       6px 14px !important;
+    font-size:     14px !important;
+    font-weight:   500 !important;
+    cursor:        pointer !important;
+    box-shadow:    none !important;
+    line-height:   1.5 !important;
+    min-height:    unset !important;
+    width:         auto !important;
+    transition:    background .15s, border-color .15s !important;
+  }}
+  .logout-btn-anchor ~ [data-testid="stButton"] button:hover {{
+    background:   #f3f4f6 !important;
+    border-color: #d1d5db !important;
+  }}
+
+  /* Alinear verticalmente la columna del botón con el título */
+  [data-testid="stHorizontalBlock"]:has(.app-header-title) [data-testid="stColumn"]:last-child {{
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }}
 </style>""",
             unsafe_allow_html=True,
         )
@@ -275,21 +310,22 @@ class SecureShell:
             else:
                 st.error("❌ Usuario o contraseña incorrectos")
 
-    def _logout_if_requested(self) -> None:
-        qp = st.query_params
-        v  = qp.get("logout")
-        if v in (["1"], "1", 1, True):
-            self._delete_session()
-            for k in ("logged_in", "user", "display_name"):
-                st.session_state.pop(k, None)
-            qp.clear()
-            st.rerun()
-
-    def _render_logout_link(self) -> None:
-        # Incluir el SID en la URL de logout para que _delete_session() lo encuentre
-        sid         = st.query_params.get(_QP_KEY, "")
-        logout_href = f"?logout=1&{_QP_KEY}={sid}" if sid else "?logout=1"
-        st.markdown(
-            f'<a class="logout-fixed" href="{logout_href}">Cerrar sesión</a>',
-            unsafe_allow_html=True,
-        )
+    def render_header(self, title: str) -> None:
+        """Header principal: título a la izquierda, botón Cerrar sesión a la derecha."""
+        _col_t, _col_btn = st.columns([8, 2])
+        with _col_t:
+            st.markdown(
+                f'<p class="app-header-title">{title}</p>',
+                unsafe_allow_html=True,
+            )
+        with _col_btn:
+            st.markdown('<span class="logout-btn-anchor"></span>', unsafe_allow_html=True)
+            if st.button("🔒 Cerrar sesión", key="_logout_btn"):
+                self._delete_session()
+                for k in ("logged_in", "user", "display_name"):
+                    st.session_state.pop(k, None)
+                try:
+                    st.query_params.clear()
+                except Exception:
+                    pass
+                st.rerun()

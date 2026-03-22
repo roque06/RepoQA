@@ -141,5 +141,175 @@
         "Estado": "Pendiente"
       }
     ]
+  },
+  {
+    "fecha": "2026-03-22 13:32:40",
+    "fuente": "QA",
+    "origen": "Generación inicial",
+    "descripcion": "Como cliente que utiliza el kiosco en el Centro de Negocios, quiero visualizar la información oficial de los productos del Banco, para conocer sus características, beneficios y condiciones antes de decidir solicitarlo.\n\n \n\nUna vez el cliente seleccione “Información de productos” en el menú inicial del kiosco, deberá mostrarse lo siguiente:\n\n \n\n·        Tarjetas: Una vez se ingrese a este tipo, deberá segregarse en dos opciones adicionales: Tarjetas de crédito y Tarjetas de débito\n\n·        Depósitos a Plazo\n\n·        Cuentas de Efectivo: Una vez se ingrese a este tipo, deberá segregarse en tres opciones adicionales: Pesos, Dólares o Euros.\n\n·        Préstamos: Una vez se ingrese a este tipo, deberá segregarse en cuatro opciones adicionales: Préstamos personales, Préstamos de vehículo, Préstamos hipotecarios, Préstamos de tienda\n\n \n\nEl cliente selecciona uno de los tipos de producto.\n\nEl kiosco consulta dinámicamente la información publicada en la página web del Banco por lo que debe cumplir con los siguientes criterios: \n\n \n\nCualquier actualización en la página web debe reflejarse automáticamente en el kiosco.\n\nSi un producto se descontinua en la web, no debe mostrarse en el kiosco.\n\nEl kiosco no debe mostrar información distinta o adicional a la publicada oficialmente.\n\nEl contenido debe adaptarse visualmente al formato de pantalla del kiosco sin alterar el texto original.\n\nNo debe permitirse edición manual del contenido en el kiosco.\n\n \n\nEl sistema muestra en pantalla el contenido oficial del producto, incluyendo:\n\n \n\n·        Nombre del producto\n\n·        Descripción general\n\n·        Beneficios\n\n·        Requisitos\n\n·        Tasas (si aplica)\n\n·        Condiciones relevantes\n\n·        Información legal o notas aclaratorias\n\n \n\nEl contenido debe mostrarse respetando:\n\n \n\n·        Redacción oficial\n\n·        Orden de beneficios\n\n·        Términos y condiciones\n\n·        Elementos visuales adaptados al formato kiosco\n\n \n\nEn la parte inferior de la pantalla deben mostrarse los siguientes botones:\n\n \n\nVolver al listado de productos\n\nPresionar “Solicitar”\n\nFinalizar sesión\n\n \n\nEn caso de inactividad ≥ 15 segundos, la sesión debe cerrarse automáticamente.\n\n \n\nEscenarios de falla:\n\nSesión expirada durante la visualización del contenido: La sesión se cierra por inactividad (≥ 15 segundos) mientras el cliente visualiza la información del producto.\n\nResultado esperado:\n\nCerrar sesión automáticamente.\n\nLimpiar completamente la pantalla.\n\nNo permitir regresar a la información mediante navegación hacia atrás.\n\nError de conexión con la página web oficial: El kiosco no logra conectarse al servicio que consume la información publicada en la web.\n\nResultado esperado:\n\nMostrar mensaje: “La información del producto no está disponible en este momento.”\n\nPermitir regresar al menú principal.\n\nNo mostrar contenido desactualizado o incompleto.\n\nTimeout del servicio web: El servicio que provee la información no responde dentro del tiempo esperado.\n\nResultado esperado:\n\nMostrar mensaje: “La información del producto no está disponible en este momento.”\n\nPermitir reintento.\n\nNo dejar pantalla en estado de carga indefinido.\n\nContenido incompleto o corrupto: El servicio retorna información parcial (por ejemplo, sin tasas o sin condiciones).\n\nResultado esperado:\n\nNo mostrar contenido incompleto.\n\n·        Mostrar mensaje: “La información del producto no está disponible en este momento.”\n\nPermitir reintento.\n\nProducto descontinuado en la web: El producto fue retirado del sitio web pero aún aparece en el kiosco.\n\nResultado esperado:\n\nNo mostrar el producto en el listado.\n\n·        Si el cliente intenta acceder, mostrar mensaje: “La información del producto no está disponible en este momento.”\n\n \n\nError en formato visual del contenido: El contenido se desconfigura en pantalla (texto superpuesto, caracteres ilegibles, secciones incompletas).\n\nResultado esperado:\n\nNo mostrar contenido visualmente defectuoso.\n\nMostrar mensaje de error genérico.\n\nPermitir regresar al menú.\n\nEnlace externo activo dentro del contenido: El contenido web incluye hipervínculos que permiten salir del entorno controlado del kiosco.\n\nResultado esperado:\n\nDeshabilitar enlaces externos.\n\nNo permitir navegación fuera del flujo del kiosco.\n\nExposición de información técnica o interna: El servicio retorna mensajes técnicos, códigos de error o información interna.\n\nResultado esperado:\n\nMostrar únicamente mensajes amigables al cliente.\n\nNo exponer información técnica o sensible.\n\nInconsistencia entre producto seleccionado y contenido mostrado: El cliente selecciona un producto, pero el sistema muestra información de otro.\n\nResultado esperado:\n\nBloquear visualización si se detecta inconsistencia.\n\nMostrar mensaje genérico de error.\n\nRegistrar incidente para revisión.\n\nInterrupción del kiosco durante la carga del contenido: El equipo se reinicia o pierde conexión mientras se carga la información.\n\nResultado esperado:\n\nNo mostrar contenido parcial.\n\nRequerir nueva autenticaci\n\n[TRUNCADO_POR_LIMITE_DE_CUOTA]",
+    "escenarios": [
+      {
+        "Title": "Visualización de información oficial de Tarjeta de Crédito",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. Información del producto \"Tarjeta de Crédito Oro\" publicada en la página web oficial, completa y en formato esperado.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\".\n3. El cliente selecciona la subcategoría \"Tarjetas de crédito\".\n4. El cliente selecciona el producto \"Tarjeta de Crédito Oro\" de la lista mostrada.\n5. El sistema carga y muestra la información detallada del producto.\n6. El cliente verifica que los botones \"Volver al listado de productos\", \"Solicitar\" y \"Finalizar sesión\" están visibles en la parte inferior.",
+        "Expected Result": "La pantalla muestra el listado de tarjetas de crédito. Se presenta la información oficial y completa de la 'Tarjeta de Crédito Oro' (Nombre, Descripción, Beneficios, Requisitos, Tasas, Condiciones, Información legal) adaptada al formato del kiosco. La redacción, orden de beneficios y términos y condiciones son idénticos a la web. Los enlaces externos están deshabilitados. Los botones de navegación se muestran correctamente.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Visualización de información oficial de Cuenta de Efectivo en Dólares",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. Información del producto \"Cuenta Ahorro Dólares\" publicada en la página web oficial, completa y en formato esperado.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Cuentas de Efectivo\".\n3. El cliente selecciona la subcategoría \"Dólares\".\n4. El cliente selecciona el producto \"Cuenta Ahorro Dólares\" de la lista mostrada.\n5. El sistema carga y muestra la información detallada del producto.",
+        "Expected Result": "La pantalla muestra el listado de cuentas en dólares. Se presenta la información oficial y completa de la 'Cuenta Ahorro Dólares' (Nombre, Descripción, Beneficios, Requisitos, Tasas, Condiciones, Información legal) adaptada al formato del kiosco. La redacción, orden de beneficios y términos y condiciones son idénticos a la web.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Cierre automático de sesión por inactividad",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Cliente en la pantalla de visualización de un producto (ej. \"Tarjeta de Crédito Oro\").\n3. Temporizador de inactividad configurado a 15 segundos.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\" y luego \"Tarjetas de crédito\".\n3. El cliente selecciona el producto \"Tarjeta de Crédito Oro\".\n4. El sistema muestra la información del producto.\n5. El cliente no interactúa con el kiosco durante más de 15 segundos.\n6. Una vez la sesión se cierra, el cliente intenta navegar hacia atrás.",
+        "Expected Result": "La sesión del kiosco se cierra automáticamente después de 15 segundos de inactividad. La pantalla se limpia completamente, mostrando el menú inicial o la pantalla de bienvenida. No se permite regresar a la información del producto mediante navegación hacia atrás.",
+        "Type": "Seguridad",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Manejo de error de conexión con servicio de información web",
+        "Preconditions": "1. Kiosco operativo.\n2. El servicio web del Banco para información de productos está inactivo o inaccesible (simular falla de red).",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Depósitos a Plazo\".\n3. El sistema intenta consultar la información de productos al servicio web.\n4. El cliente intenta regresar al menú principal.",
+        "Expected Result": "El sistema muestra el mensaje de error: 'La información del producto no está disponible en este momento.' en la pantalla. No se muestra contenido desactualizado o incompleto. El cliente puede regresar al menú principal del kiosco sin problemas.",
+        "Type": "Integracion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Manejo de timeout del servicio web al cargar información de producto",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. El servicio web del Banco para información de productos está activo, pero configurado para responder con un retraso superior al tiempo de espera del kiosco (simular timeout).",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos personales\".\n3. El sistema intenta consultar la información detallada del producto, pero el servicio web excede el tiempo de respuesta.\n4. El cliente verifica el estado de la pantalla.\n5. El cliente pulsa el botón de reintento (si existe) o intenta volver a seleccionar el producto.",
+        "Expected Result": "El sistema muestra el mensaje de error: 'La información del producto no está disponible en este momento.' en la pantalla. La pantalla no queda en estado de carga indefinido. Se ofrece la opción de reintentar la carga de información.",
+        "Type": "Integracion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Manejo de contenido de producto incompleto o corrupto desde la web",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. El servicio web del Banco para información de productos responde, pero envía datos parciales o mal estructurados para un producto (ej. sin la sección de 'Tasas' para un préstamo o con JSON corrupto).\n3. Producto \"Préstamo de Vehículo Premium\" tiene información incompleta en el origen.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos de vehículo\".\n3. El cliente selecciona el producto \"Préstamo de Vehículo Premium\".\n4. El sistema recibe la información incompleta/corrupta del servicio web.\n5. El cliente verifica el estado de la pantalla y la información mostrada.",
+        "Expected Result": "El sistema NO muestra el contenido incompleto o corrupto del 'Préstamo de Vehículo Premium'. En su lugar, muestra el mensaje: 'La información del producto no está disponible en este momento.'. Se permite al cliente reintentar la carga de la información.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "No mostrar productos descontinuados en la web",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El producto \"Depósito a Plazo Clásico Plus\" ha sido descontinuado en la página web oficial y no está publicado.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Depósitos a Plazo\".\n3. El sistema consulta la lista de depósitos a plazo disponibles.\n4. El cliente verifica la lista de productos mostrados en el kiosco.",
+        "Expected Result": "El producto 'Depósito a Plazo Clásico Plus' NO aparece en el listado de Depósitos a Plazo mostrado en el kiosco, reflejando su estado de descontinuado en la página web oficial.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Manejo de acceso a producto descontinuado que persiste erróneamente",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. (Situación de error) El producto \"Préstamo Hipotecario Flexible\" fue descontinuado en la web, pero, por un error de sincronización, aún aparece en el listado de productos del kiosco.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos hipotecarios\".\n3. El cliente selecciona el producto \"Préstamo Hipotecario Flexible\" de la lista.\n4. El sistema intenta cargar la información de un producto no existente/descontinuado.",
+        "Expected Result": "El sistema NO muestra información del producto 'Préstamo Hipotecario Flexible'. En su lugar, se muestra el mensaje: 'La información del producto no está disponible en este momento.'.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Adaptación visual del contenido web con fallos de formato",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El contenido del producto \"Cuenta de Ahorro en Euros\" en la página web tiene un error de formato que lo hace ilegible o superpuesto al ser adaptado (ej. CSS mal aplicado).",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Cuentas de Efectivo\" y luego \"Euros\".\n3. El cliente selecciona el producto \"Cuenta de Ahorro en Euros\".\n4. El sistema intenta mostrar el contenido con el error de formato.\n5. El cliente verifica la visualización en pantalla.",
+        "Expected Result": "El sistema NO muestra el contenido del producto 'Cuenta de Ahorro en Euros' con defectos visuales (texto superpuesto, ilegible o secciones incompletas). Se muestra un mensaje de error genérico (ej. 'Hubo un problema al mostrar la información. Por favor, intente más tarde.'). Se permite al cliente regresar al menú principal.",
+        "Type": "Usabilidad",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Seguridad: Deshabilitar enlaces externos en contenido de producto",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El contenido del producto \"Tarjeta de Débito Clásica\" en la página web incluye un hipervínculo a un sitio externo (ej. \"Conoce más sobre nuestros socios\").",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\" y luego \"Tarjetas de débito\".\n3. El cliente selecciona el producto \"Tarjeta de Débito Clásica\".\n4. El sistema muestra la información del producto.\n5. El cliente intenta hacer clic en el hipervínculo externo dentro del contenido.",
+        "Expected Result": "El hipervínculo externo dentro del contenido de la 'Tarjeta de Débito Clásica' se muestra deshabilitado (no es interactuable). No se permite la navegación fuera del flujo del kiosco al intentar activarlo.",
+        "Type": "Seguridad",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Seguridad: No exponer información técnica o sensible",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. El servicio web del Banco para información de productos falla y retorna un mensaje de error técnico (ej. 'SQLSTATE 23502 - Constraint violation: column 'product_name' cannot be null') o un código HTTP 500 directo al kiosco.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\" y luego \"Tarjetas de crédito\".\n3. El cliente selecciona cualquier producto de Tarjeta de Crédito.\n4. El servicio web falla y retorna un error técnico.\n5. El cliente verifica el mensaje en pantalla.",
+        "Expected Result": "El sistema NO muestra el mensaje de error técnico ni códigos de error. En su lugar, se muestra un mensaje amigable al cliente (ej. 'La información del producto no está disponible en este momento.' o 'Hubo un problema. Por favor, intente más tarde.'). No se expone información interna o sensible del sistema.",
+        "Type": "Seguridad",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validar consistencia entre selección y contenido del producto",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo con un error controlado donde al solicitar \"Préstamo de Tienda A\", retorna la información de \"Préstamo de Vehículo B\".",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos de tienda\".\n3. El cliente selecciona el producto \"Préstamo de Tienda Muebles\".\n4. El sistema recibe y detecta la inconsistencia de datos (el nombre o ID del producto en el contenido recibido no coincide con el solicitado).\n5. El cliente verifica el estado de la pantalla.",
+        "Expected Result": "El sistema NO muestra la información inconsistente del 'Préstamo de Vehículo B' al cliente. En su lugar, se bloquea la visualización y se muestra un mensaje genérico de error (ej. 'Hubo un problema al cargar la información. Por favor, intente más tarde.'). El incidente es registrado internamente para revisión.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Recuperación tras interrupción del kiosco durante carga de contenido",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo con latencia (para simular carga).",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\" y luego \"Tarjetas de crédito\".\n3. El cliente selecciona el producto \"Tarjeta de Crédito Platino\".\n4. Mientras el contenido está en proceso de carga, se simula una interrupción del kiosco (ej. reinicio abrupto del software, pérdida de conexión a red).\n5. El kiosco vuelve a estar operativo.",
+        "Expected Result": "Al reanudar la operación, el kiosco NO muestra ningún contenido parcial del producto 'Tarjeta de Crédito Platino'. La pantalla requiere una nueva autenticación o vuelve al menú inicial/pantalla de bienvenida, sin información visible persistente.",
+        "Type": "Usabilidad",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Actualización automática de contenido web en kiosco",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El producto \"Depósito a Plazo Fijo\" tiene una descripción inicial en la web (versión 1).",
+        "Steps": "1. En el kiosco, el cliente visualiza la información del \"Depósito a Plazo Fijo\" (muestra versión 1).\n2. *En segundo plano, se actualiza la descripción del \"Depósito a Plazo Fijo\" en la página web oficial (a versión 2).*\n3. El cliente sale del detalle del producto y regresa al listado principal de \"Depósitos a Plazo\".\n4. El cliente vuelve a seleccionar el \"Depósito a Plazo Fijo\".\n5. El cliente verifica la descripción del producto.",
+        "Expected Result": "El kiosco muestra la descripción actualizada (versión 2) del 'Depósito a Plazo Fijo', reflejando el cambio realizado en la página web oficial automáticamente.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Usabilidad: Contenido adaptado visualmente sin alterar texto original",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El producto \"Préstamo de Vehículo Básico\" tiene un texto extenso en su descripción en la página web.",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos de vehículo\".\n3. El cliente selecciona el producto \"Préstamo de Vehículo Básico\".\n4. El sistema muestra la información del producto.\n5. El cliente verifica que el texto original del producto se adapta al formato de pantalla del kiosco (ej. wrapping de texto, tamaño de fuente legible) sin que se altere la redacción o se trunque el contenido.",
+        "Expected Result": "La descripción del 'Préstamo de Vehículo Básico' se muestra completamente y de forma legible en la pantalla del kiosco. El texto se adapta visualmente al formato de la pantalla sin alterar la redacción oficial o perder partes del contenido original.",
+        "Type": "Usabilidad",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Seguridad: Imposibilidad de edición manual de contenido en kiosco",
+        "Preconditions": "1. Kiosco operativo y conectado a internet.\n2. Servicio web del Banco para información de productos disponible y respondiendo correctamente.\n3. El cliente está visualizando la información de un producto, por ejemplo, \"Tarjeta de Crédito Platinum\".",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Tarjetas\" y luego \"Tarjetas de crédito\".\n3. El cliente selecciona el producto \"Tarjeta de Crédito Platinum\".\n4. El sistema muestra la información del producto.\n5. El cliente intenta interactuar con el texto o elementos visuales para modificarlos (ej. arrastrar y soltar, copiar/pegar, usar teclado virtual para editar).",
+        "Expected Result": "El contenido mostrado en el kiosco para 'Tarjeta de Crédito Platinum' es de solo lectura. Ninguna acción del cliente permite la edición manual o alteración de la información o los elementos visuales.",
+        "Type": "Seguridad",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Funcionalidad de botón \"Volver al listado de productos\"",
+        "Preconditions": "1. Kiosco operativo.\n2. Cliente visualizando la información de un producto (ej. \"Préstamo de Vehículo\").",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Préstamos\" y luego \"Préstamos de vehículo\".\n3. El cliente selecciona el producto \"Préstamo de Vehículo Estándar\".\n4. El sistema muestra la información del producto.\n5. El cliente presiona el botón \"Volver al listado de productos\".",
+        "Expected Result": "El sistema regresa a la pantalla del listado de 'Préstamos de vehículo'. La pantalla anterior de información del producto se cierra correctamente.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Funcionalidad de botón \"Finalizar sesión\" desde vista de producto",
+        "Preconditions": "1. Kiosco operativo.\n2. Cliente visualizando la información de un producto (ej. \"Depósito a Plazo\").",
+        "Steps": "1. En el menú inicial, el cliente selecciona \"Información de productos\".\n2. El cliente selecciona la categoría \"Depósitos a Plazo\".\n3. El cliente selecciona el producto \"Depósito a Plazo Fijo Premium\".\n4. El sistema muestra la información del producto.\n5. El cliente presiona el botón \"Finalizar sesión\".",
+        "Expected Result": "La sesión se cierra. La pantalla vuelve al menú inicial o pantalla de bienvenida del kiosco, limpia de información anterior.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      }
+    ]
   }
 ]
