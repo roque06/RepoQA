@@ -212,6 +212,10 @@ div[data-testid="stForm"] form {{
     gap: .35rem;
 }}
 div[data-testid="stFormSubmitButton"] {{
+    width: 88% !important;
+    margin: .5rem auto 0 auto !important;
+}}
+div[data-testid="stFormSubmitButton"] > div {{
     width: 100% !important;
 }}
 
@@ -357,9 +361,7 @@ div[data-testid="stFormSubmitButton"] button:hover {{
             u = st.text_input("Usuario",    key="u")
             p = st.text_input("Contraseña", type="password", key="p")
             st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-            _, submit_col, _ = st.columns([0.06, 0.88, 0.06])
-            with submit_col:
-                submitted = st.form_submit_button("Ingresar", use_container_width=True)
+            submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
         if submitted:
             ok = False
