@@ -81,8 +81,6 @@ class SecureShell:
 
     def login(self) -> bool:
         """Aplica estilos según estado y renderiza login si hace falta."""
-        self._logout_if_requested()
-
         st.session_state.setdefault("logged_in",    False)
         st.session_state.setdefault("user",         None)
         st.session_state.setdefault("display_name", None)
@@ -95,7 +93,6 @@ class SecureShell:
             self._apply_styles_app()
             self.user         = st.session_state["user"]
             self.display_name = st.session_state["display_name"]
-            self._render_logout_link()
             return True
 
         self._apply_styles_login()
@@ -163,9 +160,13 @@ class SecureShell:
         st.markdown(
             f"""
 <style>
+/* ── Fondo y header Streamlit ──────────────────────── */
 [data-testid="stAppViewContainer"] {{ background: #f8fafc !important; }}
 [data-testid="stHeader"]           {{ background: transparent !important; }}
+[data-testid="stSidebar"]          {{ display: none !important; }}
+[data-testid="stToolbar"]          {{ right: .5rem; }}
 
+/* ── Card central ──────────────────────────────────── */
 .block-container {{
     max-width: {self.login_page_width}px;
     margin: 10vh auto 0 auto;
@@ -176,40 +177,97 @@ class SecureShell:
     border: 1px solid #e5e7eb;
 }}
 
-[data-testid="stTextInput"] [data-baseweb="input"] {{
-    background: #ffffff !important; border: 1.5px solid #e5e7eb !important;
-    border-radius: 8px !important; box-shadow: 0 1px 3px rgba(0,0,0,.04) !important;
-    transition: border-color .18s, box-shadow .18s !important;
+/* ── Cabecera login ────────────────────────────────── */
+.login-header {{
+    text-align: center;
+    margin-bottom: 2rem;
 }}
-[data-testid="stTextInput"] [data-baseweb="input"]:focus-within {{
-    border-color: #ef4444 !important; box-shadow: 0 0 0 3px rgba(239,68,68,.1) !important;
+.login-header svg {{
+    display: block;
+    margin: 0 auto 12px auto;
+}}
+.login-title {{
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.3px;
+    margin: 0;
+}}
+.login-subtitle {{
+    font-size: 13.5px;
+    color: #6b7280;
+    margin-top: 6px;
+}}
+
+/* ── Formulario login ──────────────────────────────── */
+div[data-testid="stForm"] {{
+    border: 1px solid #d1d5db !important;
+    border-radius: 10px !important;
+    padding: 1rem 1rem 1.25rem 1rem !important;
+    background: #ffffff !important;
+}}
+div[data-testid="stForm"] form {{
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}}
+div[data-testid="stFormSubmitButton"] {{
+    width: 100% !important;
+}}
+div[data-testid="stFormSubmitButton"] > button {{
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}}
+
+/* ── Inputs ────────────────────────────────────────── */
+[data-testid="stTextInput"] {{
+    margin-bottom: .45rem !important;
 }}
 [data-testid="stTextInput"] input {{
-    font-size: 14px !important; color: #1e293b !important;
-    background: transparent !important;
+    background:    #f1f5f9 !important;
+    border:        1.5px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    font-size:     14px !important;
+    color:         #1e293b !important;
+    padding:       10px 12px !important;
+    box-shadow:    0 1px 3px rgba(0,0,0,.04) !important;
+    transition:    border-color .18s, box-shadow .18s !important;
+}}
+[data-testid="stTextInput"] input:focus {{
+    border-color: #ef4444 !important;
+    box-shadow:   0 0 0 3px rgba(239,68,68,.1) !important;
+    outline:      none !important;
 }}
 [data-testid="stTextInput"] label {{
-    font-weight: 600 !important; font-size: 13px !important; color: #374151 !important;
+    font-weight: 600 !important;
+    font-size:   13px !important;
+    color:       #374151 !important;
 }}
 [data-testid="InputInstructions"] {{ display: none !important; }}
 
-[data-testid="stFormSubmitButton"] button {{
-    width: 100% !important; background: #ef4444 !important;
-    color: #ffffff !important; border: none !important;
-    border-radius: 10px !important; padding: 14px 24px !important;
-    font-size: 15px !important; font-weight: 700 !important;
+/* ── Botón Ingresar ────────────────────────────────── */
+div[data-testid="stFormSubmitButton"] button {{
+    width:          100% !important;
+    background:     #ef4444 !important;
+    color:          #ffffff !important;
+    border:         none !important;
+    border-radius:  10px !important;
+    padding:        14px 24px !important;
+    font-size:      15px !important;
+    font-weight:    700 !important;
     letter-spacing: .2px !important;
-    box-shadow: 0 4px 14px rgba(239,68,68,.35) !important;
-    margin-top: 8px !important; transition: all .2s !important; cursor: pointer !important;
+    box-shadow:     0 4px 14px rgba(239,68,68,.35) !important;
+    margin-top:     8px !important;
+    transition:     all .2s !important;
+    cursor:         pointer !important;
 }}
-[data-testid="stFormSubmitButton"] button:hover {{
-    background: #dc2626 !important;
-    box-shadow: 0 6px 20px rgba(239,68,68,.45) !important;
-    transform: translateY(-1px) !important;
+div[data-testid="stFormSubmitButton"] button:hover {{
+    background:  #dc2626 !important;
+    box-shadow:  0 6px 20px rgba(239,68,68,.45) !important;
+    transform:   translateY(-1px) !important;
 }}
-
-[data-testid="stSidebar"] {{ display: none !important; }}
-[data-testid="stToolbar"]  {{ right: .5rem; }}
 </style>""",
             unsafe_allow_html=True,
         )
@@ -225,13 +283,51 @@ class SecureShell:
   [data-testid="stSidebar"] {{ display: none !important; }}
   [data-testid="stToolbar"]  {{ right: .5rem; }}
 
-  .logout-fixed {{
-    position: fixed; top: {self.logout_top}px; right: {self.logout_right}px;
-    z-index: 9999; background: #fff; color: #0f1116; text-decoration: none;
-    border: 1px solid #e5e7eb; border-radius: .5rem; padding: .35rem .7rem;
-    font-size: .92rem; box-shadow: 0 2px 8px rgba(0,0,0,.05);
+  /* ── App header ─────────────────────────────────── */
+  .app-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 0 .75rem 0;
+    margin-bottom: .25rem;
+    border-bottom: 1px solid #f1f5f9;
   }}
-  .logout-fixed:hover {{ background: #f8f9fb; border-color: #d1d5db; }}
+  .app-header-title {{
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.3px;
+    margin: 0;
+    line-height: 1.2;
+  }}
+
+  /* ── Botón Cerrar sesión ─────────────────────────── */
+  .logout-btn-anchor ~ [data-testid="stButton"] button {{
+    background:    #ffffff !important;
+    color:         #374151 !important;
+    border:        1px solid #e5e7eb !important;
+    border-radius: 8px !important;
+    padding:       6px 14px !important;
+    font-size:     14px !important;
+    font-weight:   500 !important;
+    cursor:        pointer !important;
+    box-shadow:    none !important;
+    line-height:   1.5 !important;
+    min-height:    unset !important;
+    width:         auto !important;
+    transition:    background .15s, border-color .15s !important;
+  }}
+  .logout-btn-anchor ~ [data-testid="stButton"] button:hover {{
+    background:   #f3f4f6 !important;
+    border-color: #d1d5db !important;
+  }}
+
+  /* Alinear verticalmente la columna del botón con el título */
+  [data-testid="stHorizontalBlock"]:has(.app-header-title) [data-testid="stColumn"]:last-child {{
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }}
 </style>""",
             unsafe_allow_html=True,
         )
@@ -239,14 +335,19 @@ class SecureShell:
     def _render_login_ui(self) -> None:
         st.markdown(
             """
-            <div style="text-align:center;margin-bottom:28px">
-                <div style="font-size:36px;margin-bottom:10px">🔒</div>
-                <div style="font-size:22px;font-weight:800;color:#0f172a;letter-spacing:-.3px">
-                    Acceso al sistema
-                </div>
-                <div style="font-size:13.5px;color:#6b7280;margin-top:6px">
-                    Ingresa tus credenciales para continuar
-                </div>
+            <div class="login-header">
+              <svg width="54" height="54" viewBox="0 0 64 64"
+                   xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect x="15" y="27" width="34" height="25" rx="2.5"
+                      fill="#fbbf24" stroke="#111827" stroke-width="3"/>
+                <path d="M23 27V20c0-5 4-9 9-9s9 4 9 9v7"
+                      fill="none" stroke="#111827" stroke-width="3.5"
+                      stroke-linecap="round"/>
+                <path d="M32 35c-2 0-3.5 1.6-3.5 3.5 0 1.4.8 2.6 2 3.2V45a1.5 1.5 0 003 0v-3.3c1.2-.6 2-1.8 2-3.2C35.5 36.6 34 35 32 35z"
+                      fill="#111827"/>
+              </svg>
+              <div class="login-title">Acceso al sistema</div>
+              <div class="login-subtitle">Ingresa tus credenciales para continuar</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -275,21 +376,22 @@ class SecureShell:
             else:
                 st.error("❌ Usuario o contraseña incorrectos")
 
-    def _logout_if_requested(self) -> None:
-        qp = st.query_params
-        v  = qp.get("logout")
-        if v in (["1"], "1", 1, True):
-            self._delete_session()
-            for k in ("logged_in", "user", "display_name"):
-                st.session_state.pop(k, None)
-            qp.clear()
-            st.rerun()
-
-    def _render_logout_link(self) -> None:
-        # Incluir el SID en la URL de logout para que _delete_session() lo encuentre
-        sid         = st.query_params.get(_QP_KEY, "")
-        logout_href = f"?logout=1&{_QP_KEY}={sid}" if sid else "?logout=1"
-        st.markdown(
-            f'<a class="logout-fixed" href="{logout_href}">Cerrar sesión</a>',
-            unsafe_allow_html=True,
-        )
+    def render_header(self, title: str) -> None:
+        """Header principal: título a la izquierda, botón Cerrar sesión a la derecha."""
+        _col_t, _col_btn = st.columns([8, 2])
+        with _col_t:
+            st.markdown(
+                f'<p class="app-header-title">{title}</p>',
+                unsafe_allow_html=True,
+            )
+        with _col_btn:
+            st.markdown('<span class="logout-btn-anchor"></span>', unsafe_allow_html=True)
+            if st.button("Cerrar sesión", key="_logout_btn"):
+                self._delete_session()
+                for k in ("logged_in", "user", "display_name"):
+                    st.session_state.pop(k, None)
+                try:
+                    st.query_params.clear()
+                except Exception:
+                    pass
+                st.rerun()

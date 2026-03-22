@@ -84,7 +84,7 @@ if not shell.login():
     st.stop()
 
 # ============================ APP (UNA SOLA VEZ) ============================
-st.title("🧪 Generador de Escenarios QA para TestRail")
+shell.render_header("🧪 Generador de Escenarios QA para TestRail")
 
 # Estado global
 if "historial_generaciones" not in st.session_state:
@@ -652,6 +652,8 @@ button[kind="secondary"]:hover{
     # ─────────────────────────── STEP BAR ─────────────────────────────
     STEP_NAMES = ["Fuente", "Contexto", "Generar", "Preview", "TestRail"]
 
+    subido_ok = st.session_state.get("t1_subido_ok", False)
+
     def _sstate(n):
         if n == 1: return "done" if modo_ingreso else "active"
         if n == 2:
@@ -660,8 +662,8 @@ button[kind="secondary"]:hover{
         if n == 3:
             if not input_listo: return "pending"
             return "done" if ya_generado else "active"
-        if n == 4: return "active" if ya_generado else "pending"
-        if n == 5: return "active" if ya_generado else "pending"
+        if n == 4: return "done" if subido_ok else ("active" if ya_generado else "pending")
+        if n == 5: return "done" if subido_ok else ("active" if ya_generado else "pending")
         return "pending"
 
     bar_html = '<div class="wz-bar">'
@@ -1208,7 +1210,9 @@ button[kind="secondary"]:hover{
                                             res = enviar_a_testrail(ctx["section_id"], df_subir)
                                         st.session_state.pop("t1_confirm", None)
                                         if res["exito"]:
-                                            st.success(f"✅ {res['subidos']} casos subidos correctamente.")
+                                            st.session_state["step_actual"] = 5
+                                            st.session_state["t1_subido_ok"] = True
+                                            st.success("✅ Casos subidos correctamente a TestRail")
                                             st.rerun()
                                         else:
                                             st.error(f"❌ {res['subidos']} de {res['total']} subidos.")
@@ -1224,9 +1228,10 @@ button[kind="secondary"]:hover{
     # ─────────────────────────── LIMPIAR ──────────────────────────────
     st.markdown('<br>', unsafe_allow_html=True)
     if st.button("🧹 Limpiar todo", key="btn_limpiar_tab1"):
-        st.session_state["tab1_do_reset"]   = True
-        st.session_state["tab1_input_mode"] = None
+        st.session_state["tab1_do_reset"]    = True
+        st.session_state["tab1_input_mode"]  = None
         st.session_state["t1_show_testrail"] = False
+        st.session_state["t1_subido_ok"]     = False
         st.rerun()
 
 
