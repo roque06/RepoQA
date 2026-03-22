@@ -212,13 +212,11 @@ div[data-testid="stForm"] form {{
     gap: .35rem;
 }}
 div[data-testid="stFormSubmitButton"] {{
-    width: 100% !important;
+    width: 88% !important;
+    margin: .5rem auto 0 auto !important;
 }}
-div[data-testid="stFormSubmitButton"] > button {{
+div[data-testid="stFormSubmitButton"] > div {{
     width: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
 }}
 
 /* ── Inputs ────────────────────────────────────────── */
@@ -250,6 +248,10 @@ div[data-testid="stFormSubmitButton"] > button {{
 /* ── Botón Ingresar ────────────────────────────────── */
 div[data-testid="stFormSubmitButton"] button {{
     width:          100% !important;
+    max-width:      100% !important;
+    display:        flex !important;
+    align-items:    center !important;
+    justify-content: center !important;
     background:     #ef4444 !important;
     color:          #ffffff !important;
     border:         none !important;
@@ -260,6 +262,8 @@ div[data-testid="stFormSubmitButton"] button {{
     letter-spacing: .2px !important;
     box-shadow:     0 4px 14px rgba(239,68,68,.35) !important;
     margin-top:     8px !important;
+    margin-left:    auto !important;
+    margin-right:   auto !important;
     transition:     all .2s !important;
     cursor:         pointer !important;
 }}
@@ -357,7 +361,7 @@ div[data-testid="stFormSubmitButton"] button:hover {{
             u = st.text_input("Usuario",    key="u")
             p = st.text_input("Contraseña", type="password", key="p")
             st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-            submitted = st.form_submit_button("Ingresar")
+            submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
         if submitted:
             ok = False
