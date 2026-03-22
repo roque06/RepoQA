@@ -1,0 +1,145 @@
+[
+  {
+    "fecha": "2026-03-22 13:05:14",
+    "fuente": "QA",
+    "origen": "Generación inicial (con adjuntos)",
+    "descripcion": "### Fuente: nuevos producfos con plan de pagos iA.pdf (c13cf6e3)\nClasificación: Información Publica\nClasificación: Información Publica \n1. Préstamo con Cuota Escalonada y Amortización Diferida \nDescripción: Este producto permite que los clientes inicien con cuotas bajas, que \ncubrirán principalmente los intereses durante los primeros años, mientras el capital se \namortiza más lentamente. Esto es ideal para clientes que esperan un crecimiento \nsignificativo en sus ingresos futuros, como jóvenes profesionales o emprendedores. \nEstructura: \n• \nCuotas bajas los primeros años: El cliente pagará cuotas que cubren \nprincipalmente los intereses (como mínimo un peso de capital para cumplir con \nel reglamento). \n• \nGradiente anual: Las cuotas aumentan anualmente en un porcentaje fijo (ej. 2% \nanual) para ir ajustando el pago del capital. \n• \nAmortización Diferida: El capital se amortiza más agresivamente en los últimos \naños del préstamo, lo que permite al banco generar más intereses en los \nprimeros años. \nBeneficios: \n• \nPara el banco: Mayor generación de intereses al inicio del préstamo, ya que el \nsaldo del capital se reduce más lentamente. \n• \nPara el cliente: Cuotas iniciales más accesibles, con un aumento gradual y \npredecible en los pagos. \nRiesgo y Cumplimiento: \n• \nRiesgo: Posibilidad de que los clientes enfrenten dificultades para pagar las \ncuotas más altas en los últimos años. Se podría mitigar este riesgo \nestableciendo un análisis de ingresos futuros o un seguro de pago. \n• \nCumple con el Reglamento de Evaluación de Activos: Las cuotas siempre \ncubrirán los intereses generados y un pequeño pago de capital, lo que evita la \ncapitalización de intereses. \n \n2. Cálculo con Cuota Inicial Alta y Gradiente Decreciente \nAquí te doy las fórmulas modificadas para que la cuota inicial sea más alta y se use el \nBuscador de Objetivo para ajustar el gradiente: \nCeldas de entrada: \n• \nB1: \"Monto del préstamo (DOP)\" -> 4,000,000 \n• \nB2: \"Tasa de interés anual (%)\" -> 12\nClasificación: Información Publica\nClasificación: Información Publica \n• \nB3: \"Plazo (meses)\" -> 240 \n• \nB4: \"Cuota inicial alta (DOP)\" -> Puedes empezar con un valor estimado como \n66,066.41 DOP \n• \nB5: \"Gradiente decreciente (%)\" -> Inicialmente puedes dejar 1% o ajustar con \n\"Buscar Objetivo\" \nFórmulas actualizadas: \n1. Tasa de interés mensual (Celda B6): \nexcel \nCopiar código \n=B2/12/100 \n2. Cuota inicial alta (Celda B4): \no Puedes ingresar manualmente un valor más alto como 66,066.41 DOP. \n3. Cuota decreciente (Columna B): \nEn B8: \nexcel \nCopiar código \n=$B$4 \nEn B9: \nexcel \nCopiar código \n=B8*(1-$B$5) \nLuego arrastra esta fórmula hacia abajo para calcular las cuotas de los siguientes \nmeses. \n4. Interés mensual (Columna C): \nEn C8 (Interés del primer mes): \nexcel \nCopiar código \n=E7*$B$6 \nEn C9 (Interés del segundo mes): \nexcel \nCopiar código \n=E8*$B$6 \nLuego arrastra esta fórmula hacia abajo hasta el mes 240. \n5. Amortización del capital (Columna D): \nEn D8:\nClasificación: Información Publica\nClasificación: Información Publica \nexcel \nCopiar código \n=B8-C8 \nEn D9: \nexcel \nCopiar código \n=B9-C9 \n6. Saldo restante (Columna E): \nEn E8 (Saldo inicial): \nexcel \nCopiar código \n=$B$1 \nEn E9: \nexcel \nCopiar código \n=E8-D8 \nArrastra todas las fórmulas hasta la fila correspondiente al último mes (Mes 240). \n \nBuscar Objetivo en Excel: \nDespués de configurar las fórmulas, puedes usar el Buscador de Objetivo para ajustar el \ngradiente y asegurarte de que el saldo final sea 0. \n1. Ir a la pestaña \"Datos\" > \"Análisis de hipótesis\" > \"Buscar Objetivo\". \n2. Definir celda: Selecciona la celda del saldo final del préstamo (Ej. E240). \n3. Igual a: Coloca 0. \n4. Para cambiar la celda: Selecciona la celda donde tienes el gradiente decreciente \n(Ej. B5). \nExcel ajustará el gradiente para que el saldo final sea 0. \n \nConclusión: \nPuedes comenzar con una cuota alta, como 1.5 veces la cuota tradicional, para luego usar el \ngradiente decreciente y ajustar las cuotas a lo largo del tiempo, facilitando al cliente una \nmenor carga al final del préstamo. Además, el uso de Buscar Objetivo automatiza el ajuste \ndel gradiente para garantizar que el saldo del préstamo sea 0 al final del plazo. \n.\nClasificación: Información Publica\nClasificación: Información Publica \n \n3. Préstamo con Reestructuración Flex \nDescripción: Un producto que permite a los clientes reestructurar temporalmente \nsus cuotas en caso de enfrentar dificultades económicas. Este producto ofrece \nflexibilidad al cliente mientras garantiza la estabilidad del préstamo para el banco. \nEstructura: \n• \nFlexibilidad de Reestructuración: El cliente puede solicitar una \nreestructuración de hasta dos veces durante el plazo del préstamo. Durante \neste período, las cuotas pueden ajustarse temporalmente para cubrir solo los \nintereses o extender el plazo del préstamo. \n• \nReversión automática: Después del período de reestructuración, el préstamo \nvuelve a las cuotas originales o se ajusta ligeramente para amortizar el saldo\n\n[TRUNCADO_POR_LIMITE_DE_CUOTA]",
+    "escenarios": [
+      {
+        "Title": "Creacion exitosa de prestamo con cuota escalonada y gradiente anual",
+        "Preconditions": "1. Sistema de originación de préstamos disponible y funcionando.\n2. Usuario con rol \"Originador de Préstamos\" o superior, con permisos para crear nuevos productos.\n3. Configuración del producto \"Préstamo Cuota Escalonada\" cargada en el sistema.\n4. Existencia de un cliente elegible con historial crediticio favorable.",
+        "Steps": "1. Acceder al módulo de creación de préstamos en el sistema.\n2. Seleccionar el producto \"Préstamo con Cuota Escalonada\".\n3. Introducir un monto de préstamo (ej. 1,000,000 DOP).\n4. Establecer una tasa de interés anual (ej. 8%).\n5. Configurar un plazo (ej. 120 meses).\n6. Definir un gradiente anual de aumento de cuota (ej. 2%).\n7. Guardar o simular el plan de pagos.",
+        "Expected Result": "El sistema genera un plan de pagos exitoso con cuotas iniciales bajas que aumentan anualmente en el porcentaje definido (2%), y la amortización del capital se acelera en los últimos años del préstamo.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validacion de cuota inicial cubriendo interes mas 1 peso de capital",
+        "Preconditions": "1. Sistema de originación de préstamos disponible y funcionando.\n2. Usuario con rol \"Originador de Préstamos\" o superior.\n3. Configuración del producto \"Préstamo Cuota Escalonada\" con la regla de mínimo 1 peso de capital.",
+        "Steps": "1. Acceder al módulo de simulación de préstamos.\n2. Seleccionar el producto \"Préstamo con Cuota Escalonada\".\n3. Ingresar un monto de préstamo (ej. 500,000 DOP), tasa (ej. 10%) y plazo (ej. 60 meses).\n4. Simular el plan de pagos y observar la primera cuota.\n5. Realizar un cálculo manual del interés del primer mes (Monto * Tasa mensual).\n6. Verificar que la porción de capital amortizada en la primera cuota sea al menos 1 DOP.",
+        "Expected Result": "La primera cuota del plan de pagos cubre los intereses generados en el primer período y amortiza al menos 1 DOP de capital, evitando la capitalización de intereses.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Verificacion de amortizacion diferida y generacion de intereses",
+        "Preconditions": "1. Sistema de originación de préstamos disponible y funcionando.\n2. Usuario con rol \"Originador de Préstamos\" o superior.\n3. Préstamo \"Cuota Escalonada\" con monto (ej. 2,000,000 DOP), tasa (ej. 9%), plazo (ej. 180 meses) y gradiente (ej. 3%) simulado.",
+        "Steps": "1. Acceder a la tabla de amortización del préstamo simulado.\n2. Analizar las primeras 12 cuotas, observando la proporción de interés vs. capital.\n3. Analizar las últimas 12 cuotas del préstamo, observando la proporción de interés vs. capital.\n4. Comparar la amortización de capital en los primeros años versus los últimos años.",
+        "Expected Result": "Las primeras cuotas muestran una proporción mayor de interés y una amortización de capital más lenta. Las últimas cuotas muestran una proporción mayor de amortización de capital y una reducción más agresiva del saldo, lo que confirma la amortización diferida.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validacion de imposibilidad de capitalizacion de intereses",
+        "Preconditions": "1. Sistema de originación de préstamos disponible y funcionando.\n2. Usuario con rol \"Auditor\" o \"Administrador\" con acceso a los cálculos detallados del plan de pagos.\n3. Préstamo \"Cuota Escalonada\" generado previamente con cualquier parámetro válido.\n4. Reglamento de Evaluación de Activos implementado en el sistema para evitar capitalización.",
+        "Steps": "1. Acceder al plan de pagos detallado de un préstamo \"Cuota Escalonada\".\n2. Revisar la porción de interés y capital para cada cuota a lo largo de todo el plazo.\n3. Verificar que en ninguna cuota el componente de interés sea mayor que el pago total de la cuota o que el capital restante aumente.\n4. Asegurarse de que el saldo de capital se reduzca progresivamente, incluso si es en pequeñas cantidades al inicio.",
+        "Expected Result": "En ningún punto del plan de pagos se observa que los intereses no sean cubiertos por la cuota o que el capital se incremente por capitalización de intereses, confirmando el cumplimiento del Reglamento de Evaluación de Activos.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Calculo de cuotas con gradiente anual cero o nulo",
+        "Preconditions": "1. Sistema de originación de préstamos disponible y funcionando.\n2. Usuario con rol \"Originador de Préstamos\" o superior.\n3. Configuración del producto \"Préstamo Cuota Escalonada\" cargada en el sistema.",
+        "Steps": "1. Acceder al módulo de creación de préstamos en el sistema.\n2. Seleccionar el producto \"Préstamo con Cuota Escalonada\".\n3. Introducir un monto de préstamo (ej. 750,000 DOP).\n4. Establecer una tasa de interés anual (ej. 9.5%).\n5. Configurar un plazo (ej. 96 meses).\n6. Definir el gradiente anual de aumento de cuota como 0% o nulo.\n7. Guardar o simular el plan de pagos.",
+        "Expected Result": "El sistema genera un plan de pagos donde las cuotas se mantienen constantes a lo largo del tiempo, similar a un préstamo tradicional, y la amortización del capital se comporta como una cuota fija.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Calculo de plan de pagos con cuota inicial alta y gradiente decreciente ajustado",
+        "Preconditions": "1. Módulo de simulación de préstamos con \"Buscador de Objetivo\" disponible.\n2. Usuario con rol \"Analista Financiero\" o \"Originador de Préstamos\".\n3. Parámetros de entrada configurables: Monto, Tasa, Plazo, Cuota inicial, Gradiente decreciente.",
+        "Steps": "1. Ingresar un monto de préstamo (ej. 4,000,000 DOP), tasa (ej. 12%), y plazo (ej. 240 meses).\n2. Establecer una cuota inicial alta (ej. 66,066.41 DOP).\n3. Establecer un gradiente decreciente inicial (ej. 1%).\n4. Ejecutar la funcionalidad de \"Buscador de Objetivo\" para ajustar el gradiente.\n5. Definir la celda objetivo como el \"Saldo Final del Préstamo\".\n6. Establecer el valor objetivo a \"0\".\n7. Seleccionar la celda del \"Gradiente Decreciente\" para que sea ajustada.\n8. Confirmar la ejecución del \"Buscador de Objetivo\".",
+        "Expected Result": "El sistema ajusta automáticamente el valor del Gradiente Decreciente para que el saldo final del préstamo sea exactamente 0 al término del plazo (mes 240), y el plan de pagos refleje cuotas iniciales altas que disminuyen progresivamente.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validacion de formulas de calculo para intereses y amortizacion",
+        "Preconditions": "1. Módulo de simulación de préstamos con detalle de cálculo por cuota.\n2. Usuario con rol \"Analista Financiero\" o \"QA\".\n3. Un plan de pagos generado con \"Cuota Inicial Alta y Gradiente Decreciente\" usando los valores del ejemplo (Monto 4M, Tasa 12%, Plazo 240, Cuota inicial 66066.41, Gradiente X%).",
+        "Steps": "1. Acceder a la tabla de amortización del préstamo simulado.\n2. Tomar los valores del Mes 1: Saldo inicial (B1), Tasa de interés mensual (B6), Cuota (B8).\n3. Calcular manualmente: Interés = Saldo inicial * Tasa mensual.\n4. Calcular manualmente: Amortización = Cuota - Interés.\n5. Calcular manualmente: Saldo restante = Saldo inicial - Amortización.\n6. Comparar los valores calculados manualmente con los valores mostrados en el sistema para el Mes 1.\n7. Repetir el proceso para el Mes 2 y un mes intermedio (ej. Mes 120), considerando la fórmula de la cuota decreciente.",
+        "Expected Result": "Los valores de interés mensual, amortización de capital y saldo restante calculados manualmente coinciden exactamente con los valores mostrados en el plan de pagos del sistema para los meses verificados.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Calculo con monto de prestamo extremo y plazo maximo",
+        "Preconditions": "1. Módulo de simulación de préstamos con \"Buscador de Objetivo\" disponible.\n2. Usuario con rol \"Analista Financiero\".\n3. Configuración de límites para monto y plazo del préstamo (ej. máximo 50,000,000 DOP y 360 meses).",
+        "Steps": "1. Ingresar el monto de préstamo máximo permitido (ej. 50,000,000 DOP).\n2. Establecer la tasa de interés anual (ej. 7%).\n3. Configurar el plazo máximo permitido (ej. 360 meses).\n4. Establecer una cuota inicial estimada (ej. 1.5 veces una cuota tradicional calculada previamente).\n5. Definir un gradiente decreciente inicial (ej. 0.5%).\n6. Ejecutar el \"Buscador de Objetivo\" para ajustar el gradiente y asegurar saldo final 0.",
+        "Expected Result": "El sistema calcula un plan de pagos coherente para el préstamo con el monto y plazo máximos, el 'Buscador de Objetivo' ajusta el gradiente correctamente, y el saldo final es 0.",
+        "Type": "Funcional",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Comprobacion de ajuste de gradiente cuando el saldo final no es cero",
+        "Preconditions": "1. Módulo de simulación de préstamos con \"Buscador de Objetivo\" disponible.\n2. Usuario con rol \"Analista Financiero\".\n3. Préstamo configurado con un gradiente fijo que se sabe que no lleva a un saldo final cero.",
+        "Steps": "1. Ingresar un monto (ej. 1,000,000 DOP), tasa (ej. 10%) y plazo (ej. 120 meses).\n2. Establecer una cuota inicial (ej. 15,000 DOP).\n3. Configurar un gradiente decreciente (ej. 0.1%) sin usar el \"Buscador de Objetivo\" inicialmente.\n4. Simular el plan de pagos y verificar que el saldo final no sea 0.\n5. Luego, ejecutar el \"Buscador de Objetivo\", seleccionando el saldo final como objetivo 0 y el gradiente como la celda a cambiar.",
+        "Expected Result": "El \"Buscador de Objetivo\" modifica el valor del gradiente decreciente desde el valor inicial (0.1%) a un nuevo valor que resulta en un saldo final de préstamo exactamente 0. El sistema muestra el nuevo gradiente y el plan de pagos ajustado.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Aplicacion exitosa de primera reestructuracion cubriendo solo intereses",
+        "Preconditions": "1. Sistema de gestión de préstamos disponible.\n2. Usuario con rol \"Gestor de Cartera\" o \"Especialista en Reestructuraciones\", con permisos para aplicar reestructuraciones.\n3. Préstamo activo con 30 cuotas pagadas (ej. Monto 3,000,000 DOP, Tasa 10%, Plazo 120 meses).\n4. El cliente ha solicitado la primera reestructuración para cubrir solo intereses por 3 meses.\n5. La evaluación de capacidad de pago del cliente es favorable.",
+        "Steps": "1. Acceder al perfil del préstamo activo en el sistema.\n2. Iniciar el proceso de \"Reestructuración Flex\".\n3. Seleccionar la opción \"Cubrir solo intereses\".\n4. Definir el período de reestructuración (ej. 3 meses).\n5. Confirmar la aplicación de la reestructuración.\n6. Verificar el plan de pagos durante y después del período de reestructuración.",
+        "Expected Result": "El sistema aplica exitosamente la primera reestructuración. Durante los 3 meses, las cuotas se ajustan para cubrir solo los intereses generados. Después de los 3 meses, el plan de pagos original se reanuda automáticamente o se ajusta proporcionalmente para amortizar el saldo restante, sin capitalización de intereses.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Aplicacion exitosa de segunda reestructuracion extendiendo plazo",
+        "Preconditions": "1. Sistema de gestión de préstamos disponible.\n2. Usuario con rol \"Gestor de Cartera\".\n3. Préstamo activo que ya tuvo una primera reestructuración y volvió a su estado normal.\n4. El cliente ha solicitado la segunda reestructuración, esta vez para extender el plazo por 6 meses.\n5. La evaluación de capacidad de pago del cliente es favorable.",
+        "Steps": "1. Acceder al perfil del préstamo que ya tuvo una reestructuración.\n2. Iniciar el proceso de \"Reestructuración Flex\" por segunda vez.\n3. Seleccionar la opción \"Extender el plazo del préstamo\".\n4. Definir la extensión del plazo (ej. 6 meses).\n5. Confirmar la aplicación de la reestructuración.\n6. Verificar el plan de pagos actualizado y el nuevo plazo final.",
+        "Expected Result": "El sistema aplica exitosamente la segunda reestructuración. El plazo total del préstamo se extiende por 6 meses, y las cuotas se recalculan para el plazo extendido. El sistema registra que se han utilizado 2 de 2 oportunidades de reestructuración.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validacion de imposibilidad de tercera reestructuracion",
+        "Preconditions": "1. Sistema de gestión de préstamos disponible.\n2. Usuario con rol \"Gestor de Cartera\".\n3. Préstamo activo que ya ha sido reestructurado dos veces (una cubriendo intereses, otra extendiendo plazo).\n4. El contador de reestructuraciones para este préstamo está en 2.",
+        "Steps": "1. Acceder al perfil del préstamo que ya ha tenido dos reestructuraciones.\n2. Intentar iniciar el proceso de \"Reestructuración Flex\" por tercera vez.\n3. Seleccionar cualquier opción de reestructuración (ej. \"Cubrir solo intereses\").\n4. Intentar confirmar la operación.",
+        "Expected Result": "El sistema impide la aplicación de una tercera reestructuración y muestra un mensaje de error claro indicando que se ha alcanzado el límite máximo de reestructuraciones (ej. 'Este préstamo ha alcanzado su límite de 2 reestructuraciones').",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Verificacion de reversion automatica de cuotas post-reestructuracion",
+        "Preconditions": "1. Sistema de gestión de préstamos disponible y con procesador de eventos programados.\n2. Usuario con rol \"Gestor de Cartera\".\n3. Préstamo con una reestructuración activa (ej. cubriendo intereses por 3 meses) y fecha de fin de reestructuración próxima.\n4. Plan de pagos original del préstamo guardado y accesible.",
+        "Steps": "1. Configurar la fecha del sistema para el día posterior al final del período de reestructuración.\n2. Acceder al perfil del préstamo reestructurado.\n3. Revisar el plan de pagos del préstamo.\n4. Verificar que las cuotas posteriores al período de reestructuración hayan vuelto a su cálculo original o ajustado.\n5. Asegurarse de que el saldo de capital y los intereses se estén amortizando según lo esperado post-reestructuración.",
+        "Expected Result": "Las cuotas del préstamo se revierten automáticamente a su estado original o ajustado (para amortizar el saldo restante) inmediatamente después de que finaliza el período de reestructuración. El sistema no requiere intervención manual para este ajuste.",
+        "Type": "Funcional",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Validacion de cumplimiento normativo de no capitalizacion en reestructuracion",
+        "Preconditions": "1. Sistema de gestión de préstamos disponible y con detalle de cálculo por cuota.\n2. Usuario con rol \"Auditor\" o \"Administrador\" con acceso a los cálculos.\n3. Préstamo con reestructuración activa donde las cuotas cubren solo intereses.\n4. Reglamento de Evaluación de Activos implementado para reestructuraciones.",
+        "Steps": "1. Acceder al plan de pagos detallado de un préstamo durante su período de reestructuración (cubriendo solo intereses).\n2. Para cada cuota dentro del período reestructurado, verificar que el monto de la cuota sea igual o superior al interés generado en ese período.\n3. Asegurarse de que el saldo de capital no aumente durante este período.\n4. Verificar el componente de amortización de capital sea cero o un valor mínimo si no se puede ser 0.",
+        "Expected Result": "Durante el período de reestructuración, las cuotas cubren al menos los intereses generados, y el saldo de capital no muestra un incremento debido a capitalización de intereses, confirmando el cumplimiento con las normativas vigentes.",
+        "Type": "Validacion",
+        "Priority": "Alta",
+        "Estado": "Pendiente"
+      },
+      {
+        "Title": "Simulacion de rechazo de reestructuracion por baja capacidad de pago",
+        "Preconditions": "1. Sistema de gestión de préstamos con motor de evaluación de capacidad de pago integrado.\n2. Usuario con rol \"Gestor de Cartera\".\n3. Préstamo activo con historial de pagos irregular y datos financieros del cliente que indican baja capacidad de pago.\n4. Reglas de negocio configuradas para rechazar reestructuraciones si la capacidad de pago es insuficiente.",
+        "Steps": "1. Acceder al perfil de un cliente con datos de ingresos y gastos que resultan en una capacidad de pago insuficiente.\n2. Iniciar el proceso de \"Reestructuración Flex\" para su préstamo activo.\n3. Seleccionar cualquier opción de reestructuración (ej. extender plazo).\n4. Ingresar los datos de la solicitud y proceder a la evaluación.\n5. Intentar confirmar la reestructuración.",
+        "Expected Result": "El sistema rechaza la solicitud de reestructuración y muestra un mensaje claro indicando que la reestructuración no puede ser aprobada debido a la baja capacidad de pago del cliente, según la evaluación realizada.",
+        "Type": "Validacion",
+        "Priority": "Media",
+        "Estado": "Pendiente"
+      }
+    ]
+  }
+]

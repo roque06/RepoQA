@@ -3,8 +3,55 @@ import io
 import pandas as pd
 import streamlit as st
 from datetime import datetime
-import io, re
+import io, re, json, os
 from utils_ingest import consolidate_attachments
+
+# ──── Persistencia del historial ────────────────────────────────────────────
+_HISTORIAL_PATH = "historial_generaciones.json"
+
+def _serializar_historial(historial: list) -> list:
+    result = []
+    for item in historial:
+        entry = {k: v for k, v in item.items() if k != "escenarios"}
+        esc = item.get("escenarios")
+        if esc is not None:
+            try:
+                entry["escenarios"] = esc.to_dict(orient="records")
+            except Exception:
+                entry["escenarios"] = []
+        result.append(entry)
+    return result
+
+def _deserializar_historial(data: list) -> list:
+    result = []
+    for item in data:
+        entry = {k: v for k, v in item.items() if k != "escenarios"}
+        esc = item.get("escenarios")
+        if esc is not None:
+            try:
+                entry["escenarios"] = pd.DataFrame(esc)
+            except Exception:
+                entry["escenarios"] = pd.DataFrame()
+        result.append(entry)
+    return result
+
+def guardar_historial(historial: list) -> None:
+    try:
+        with open(_HISTORIAL_PATH, "w", encoding="utf-8") as f:
+            json.dump(_serializar_historial(historial), f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def cargar_historial() -> list:
+    if not os.path.exists(_HISTORIAL_PATH):
+        return []
+    try:
+        with open(_HISTORIAL_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return _deserializar_historial(data)
+    except Exception:
+        return []
+# ────────────────────────────────────────────────────────────────────────────
 
 
 # 1) SIEMPRE la primera llamada Streamlit
@@ -28,8 +75,8 @@ from utils_gemini import (
 # 3) Login + tamaños independientes
 shell = SecureShell(
     auth_yaml=".streamlit/auth.yaml",
-    login_page_width=560,   # <-- ancho SOLO del login
-    app_page_width=1600,    # <-- ancho SOLO del contenido de la app
+    login_page_width=560,
+    app_page_width=1600,
     logout_top=12,
     logout_right=96,
 )
@@ -40,27 +87,16 @@ if not shell.login():
 st.title("🧪 Generador de Escenarios QA para TestRail")
 
 # Estado global
-st.session_state.setdefault("historial_generaciones", [])
+if "historial_generaciones" not in st.session_state:
+    st.session_state["historial_generaciones"] = cargar_historial()
 st.session_state.setdefault("historial", [])
 st.session_state.setdefault("df_editable", None)
 st.session_state.setdefault("generado", False)
 st.session_state.setdefault("texto_funcional", "")
 st.session_state.setdefault("descripcion_refinada", "")
 
-
-
-
-
-
-
-
-
-
-
 # Tabs principales
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "✏️ Generar", "🛠️ Editar", "🧪 Revisar", "📚 Historial", "🚀 Subir a TestRail"
-])
+tab1, tab2 = st.tabs(["✏️ Generar", "📚 Historial"])
 
 def limpiar_pestanas():
     """Limpia variables de estado menos el historial."""
@@ -72,16 +108,7 @@ def limpiar_pestanas():
                 st.session_state[key] = None if key == "df_editable" else False
 
 
-st.markdown(
-    """
-<style>
-.divider { border-top: 1px solid #CCC; margin: 20px 0 10px; }
-</style>
-<div class="divider"></div>
-""",
-    unsafe_allow_html=True,
-)
-
+st.divider()
 
 
 def render_df_paginado(df, key_prefix: str, filas_por_pagina: int = 20, titulo: str = "Vista previa"):
@@ -108,13 +135,6 @@ def render_df_paginado(df, key_prefix: str, filas_por_pagina: int = 20, titulo: 
 
     st.dataframe(df.iloc[inicio:fin], use_container_width=True)
     st.caption(f"Mostrando {inicio+1}–{min(fin, total_filas)} de {total_filas} filas")
-
-
-
-
-
-
-
 
 
 def _render_pdf_pages(file_bytes, dpi=140):
@@ -155,7 +175,6 @@ def _paginate_text(text, max_chars=3000):
         pages.append(buf)
     return pages or [""]
 
-# Reemplaza COMPLETA esta función por la de abajo
 def preview_document_paginado_inline(
     file_label: str,
     file_name: str = "",
@@ -163,17 +182,15 @@ def preview_document_paginado_inline(
     text_extraido: str | None = None,
     tipo: str | None = None,
     key_ns: str = "pview",
-    collapsible: bool = True,        # <— nuevo: mostrar/ocultar
-    expanded: bool = False           # <— nuevo: por defecto colapsado
+    collapsible: bool = True,
+    expanded: bool = False
 ):
     """Renderiza un preview paginado (PDF como imágenes, texto paginado) con expander opcional."""
-    # Inferencia del tipo
     if not tipo and file_name:
         tipo = "pdf" if file_name.lower().endswith(".pdf") else "texto"
     tipo = tipo or ("texto" if text_extraido is not None else "pdf")
     state_key = f"{key_ns}:{file_label}:{file_name}:page"
 
-    # Contenedor colapsable
     header = f"{file_label} — Preview paginado"
     container = st.expander(header, expanded=expanded) if collapsible else st.container()
 
@@ -212,7 +229,6 @@ def preview_document_paginado_inline(
                     st.session_state[state_key] = total
 
             st.caption(f"Página {st.session_state[state_key]} de {total}")
-            # 👇 Cambio clave: usar use_container_width (NO use_column_width)
             st.image(pages[st.session_state[state_key]-1], use_container_width=True)
 
         else:
@@ -252,38 +268,31 @@ def preview_document_paginado_inline(
                 st.markdown(pages[st.session_state[state_key]-1])
 
 
-
-
 # =========================
-# TAB 1 — Generar + Preview + Limpiar (con reset seguro y borrado de sugerencias)
+# TAB 1 — RESET PRE-RUN (se ejecuta ANTES de crear widgets)
 # =========================
 import io, re
 from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-# ---------- RESET PRE-RUN (se ejecuta ANTES de crear widgets) ----------
-# Si el botón "Limpiar" se presionó en el run anterior, aquí se vacía todo
 if st.session_state.get("tab1_do_reset", False):
-    # Estados base del Tab1
-    st.session_state["texto_funcional"] = ""
-    st.session_state["attachments_text"] = ""
-    st.session_state["attachments_meta"] = []
-    st.session_state["use_attachments"] = True
-    st.session_state["df_editable"] = None
-    st.session_state["generado"] = False
+    st.session_state["texto_funcional"]   = ""
+    st.session_state["attachments_text"]  = ""
+    st.session_state["attachments_meta"]  = []
+    st.session_state["use_attachments"]   = True
+    st.session_state["df_editable"]       = None
+    st.session_state["generado"]          = False
     st.session_state["descripcion_refinada"] = ""
+    st.session_state["tab1_input_mode"]   = None
+    st.session_state["t1_show_testrail"]  = False
 
-    # Borrar estados de preview/paginación (keys creadas por el preview)
     for k in list(st.session_state.keys()):
         if k.startswith("t1:") or k.startswith("pview:") or (":page" in k):
             st.session_state.pop(k, None)
 
-    # 🔁 Forzar reset REAL del uploader cambiando la key (nonce)
     st.session_state["tab1_uploader_nonce"] = st.session_state.get("tab1_uploader_nonce", 0) + 1
 
-    # 🧹 Borrar estados de SUGERENCIAS (Tab de Sugerencias)
-    # Limpia nombres típicos; si usas otros, añade aquí sus keys:
     suger_keys = [
         "sugerencias_df", "sugerencias_seleccionadas", "sugerencias_aplicadas",
         "df_sugerencias", "df_sugerencias_edit", "sugerencias_table_state",
@@ -294,8 +303,7 @@ if st.session_state.get("tab1_do_reset", False):
         if k in suger_keys or k.startswith("suger") or k.startswith("tab3:"):
             st.session_state.pop(k, None)
 
-    # No borrar historial
-    st.session_state.pop("tab1_do_reset", None)  # consume el flag para este run
+    st.session_state.pop("tab1_do_reset", None)
 
 # ---------- ESTADOS INICIALES (defaults) ----------
 st.session_state.setdefault("attachments_text", "")
@@ -304,15 +312,321 @@ st.session_state.setdefault("use_attachments", True)
 st.session_state.setdefault("df_editable", None)
 st.session_state.setdefault("generado", False)
 st.session_state.setdefault("descripcion_refinada", "")
-st.session_state.setdefault("historial_generaciones", [])
+if "historial_generaciones" not in st.session_state:
+    st.session_state["historial_generaciones"] = cargar_historial()
 st.session_state.setdefault("tab1_uploader_nonce", 0)
 st.session_state.setdefault("tab1_input_mode", None)
 st.session_state.setdefault("tab1_last_upload_signature", ())
 
-with tab1:
-    st.subheader("📌 Generar escenarios de prueba automáticamente")
 
-    # ---- Estado por defecto seguro (no reasignar despues del text_area) ----
+# =========================
+# TAB 1 — WIZARD MODERNO
+# =========================
+with tab1:
+
+    # ─────────────────────────── CSS WIZARD ───────────────────────────
+    st.markdown("""<style>
+
+/* ══════════════════════════════════════════
+   GLOBAL — App background & typography
+══════════════════════════════════════════ */
+[data-testid="stAppViewContainer"]{background:#f8fafc!important}
+[data-testid="stHeader"]{background:transparent!important}
+[data-testid="block-container"]{padding-top:1.6rem!important}
+section[data-testid="stSidebar"]{background:#fff!important}
+
+/* ══════════════════════════════════════════
+   STEP BAR
+══════════════════════════════════════════ */
+.wz-bar{
+    display:flex;align-items:flex-start;
+    background:#fff;
+    border:1px solid #e2e8f0;
+    border-radius:16px;
+    padding:20px 28px;
+    margin-bottom:24px;
+    box-shadow:0 1px 4px rgba(0,0,0,.06);
+}
+.wz-step{display:flex;flex-direction:column;align-items:center;flex:1;position:relative}
+.wz-circle{
+    width:36px;height:36px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:800;flex-shrink:0;
+    transition:all .25s;
+}
+.wz-circle.done{
+    background:#10b981;color:#fff;
+    box-shadow:0 2px 8px rgba(16,185,129,.35);
+}
+.wz-circle.active{
+    background:#ef4444;color:#fff;
+    box-shadow:0 0 0 5px rgba(239,68,68,.15),0 4px 12px rgba(239,68,68,.4);
+    transform:scale(1.08);
+}
+.wz-circle.pending{background:#e5e7eb;color:#9ca3af}
+.wz-lbl{
+    font-size:10.5px;margin-top:7px;color:#9ca3af;
+    text-align:center;max-width:70px;line-height:1.4;
+    font-weight:500;letter-spacing:.2px;
+}
+.wz-lbl.active{color:#ef4444;font-weight:800}
+.wz-lbl.done{color:#059669;font-weight:600}
+.wz-line{
+    position:absolute;top:18px;
+    left:calc(50% + 18px);right:calc(-50% + 18px);
+    height:2px;background:#e5e7eb;border-radius:2px;
+}
+.wz-line.done{background:linear-gradient(90deg,#10b981,#34d399)}
+.wz-step:last-child .wz-line{display:none}
+
+/* ══════════════════════════════════════════
+   SECTION HEADER  (qa-card-hdr)
+══════════════════════════════════════════ */
+.qa-card-hdr{
+    font-size:16px;font-weight:800;color:#0f172a;
+    margin-bottom:20px;
+    display:flex;align-items:center;gap:10px;
+    padding-bottom:14px;
+    border-bottom:1px solid #f1f5f9;
+    letter-spacing:-.2px;
+}
+
+/* ══════════════════════════════════════════
+   SOURCE CARDS  (Step 1)
+══════════════════════════════════════════ */
+.sc-wrap button,
+.sc-sel button{
+    width:100%!important;
+    min-height:120px!important;
+    border-radius:14px!important;
+    border:2px solid #e2e8f0!important;
+    background:#ffffff!important;
+    padding:18px 16px!important;
+    text-align:left!important;
+    white-space:pre-wrap!important;
+    font-size:13.5px!important;
+    line-height:1.6!important;
+    box-shadow:0 2px 8px rgba(0,0,0,.05)!important;
+    transition:all .2s cubic-bezier(.4,0,.2,1)!important;
+    color:#1e293b!important;
+    cursor:pointer!important;
+}
+.sc-wrap button:hover{
+    border-color:#ef4444!important;
+    box-shadow:0 6px 18px rgba(239,68,68,.18)!important;
+    transform:translateY(-3px)!important;
+    background:#fff!important;
+}
+.sc-sel button{
+    border-color:#ef4444!important;
+    background:linear-gradient(145deg,#fff5f5,#ffffff)!important;
+    box-shadow:0 0 0 3px rgba(239,68,68,.12),0 6px 20px rgba(239,68,68,.2)!important;
+    transform:translateY(-2px)!important;
+}
+/* ══════════════════════════════════════════
+   TEXTAREA  — visual prominence
+══════════════════════════════════════════ */
+[data-testid="stTextArea"] textarea{
+    border:1.5px solid #e2e8f0!important;
+    border-radius:12px!important;
+    padding:16px!important;
+    font-size:14px!important;
+    line-height:1.65!important;
+    color:#1e293b!important;
+    background:#fdfdff!important;
+    box-shadow:inset 0 2px 4px rgba(0,0,0,.04)!important;
+    transition:border-color .18s,box-shadow .18s!important;
+}
+[data-testid="stTextArea"] textarea:focus{
+    border-color:#ef4444!important;
+    box-shadow:0 0 0 3px rgba(239,68,68,.1),inset 0 2px 4px rgba(0,0,0,.03)!important;
+    outline:none!important;
+}
+
+/* ══════════════════════════════════════════
+   GENERATE BUTTON  (gen-wrap)
+══════════════════════════════════════════ */
+.gen-wrap button{
+    background:#ef4444!important;
+    color:#fff!important;
+    border:none!important;
+    border-radius:12px!important;
+    padding:18px 24px!important;
+    font-size:16px!important;
+    font-weight:800!important;
+    width:100%!important;
+    letter-spacing:.3px!important;
+    box-shadow:0 6px 20px rgba(239,68,68,.4),0 2px 6px rgba(239,68,68,.2)!important;
+    transition:all .22s cubic-bezier(.4,0,.2,1)!important;
+    min-height:58px!important;
+}
+.gen-wrap button:hover:not(:disabled){
+    background:#dc2626!important;
+    box-shadow:0 10px 28px rgba(239,68,68,.5),0 3px 8px rgba(239,68,68,.25)!important;
+    transform:translateY(-2px)!important;
+}
+.gen-wrap button:disabled{
+    background:#cbd5e1!important;
+    color:#94a3b8!important;
+    box-shadow:none!important;
+    transform:none!important;
+    cursor:not-allowed!important;
+}
+
+/* ══════════════════════════════════════════
+   BADGES
+══════════════════════════════════════════ */
+.bdg{
+    padding:3px 10px;border-radius:20px;
+    font-size:11.5px;font-weight:700;
+    display:inline-block;vertical-align:middle;
+    margin-right:5px;margin-bottom:4px;
+}
+.bdg-g{background:#d1fae5;color:#065f46}
+.bdg-r{background:#fee2e2;color:#991b1b}
+.bdg-y{background:#fef3c7;color:#92400e}
+.bdg-b{background:#dbeafe;color:#1e40af}
+.bdg-p{background:#ede9fe;color:#5b21b6}
+.bdg-gr{background:#f1f5f9;color:#475569}
+
+/* ══════════════════════════════════════════
+   PILLS  (summary bar)
+══════════════════════════════════════════ */
+.pill{
+    background:#f1f5f9;border:1px solid #e2e8f0;
+    border-radius:10px;padding:8px 16px;
+    display:inline-block;font-size:13px;
+    margin-right:8px;margin-bottom:10px;
+    color:#334155;font-weight:500;
+}
+.pill b{color:#ef4444;font-weight:800}
+
+/* ══════════════════════════════════════════
+   TESTRAIL SECTION  — cierre de flujo
+══════════════════════════════════════════ */
+.tr-header{
+    background:linear-gradient(135deg,#6366f1 0%,#4f46e5 100%);
+    padding:20px 28px;
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;
+}
+.tr-header-title{
+    font-size:17px;font-weight:800;color:#ffffff;
+    letter-spacing:-.2px;
+}
+.tr-header-sub{
+    font-size:12.5px;color:rgba(255,255,255,.8);
+    margin-top:3px;
+}
+.tr-summary{
+    display:flex;align-items:center;gap:12px;
+    background:#f0f4ff;
+    border:1px solid #c7d2fe;
+    border-radius:10px;
+    padding:12px 18px;
+    margin-bottom:20px;
+    font-size:13.5px;
+    color:#1e293b;
+}
+.tr-summary strong{color:#4f46e5;font-size:20px;font-weight:800;margin-right:4px}
+.tr-badge{
+    background:#e0e7ff;color:#3730a3;
+    border-radius:6px;padding:3px 10px;
+    font-size:11.5px;font-weight:700;
+    display:inline-block;margin-left:6px;
+}
+.tr-select-lbl{
+    font-size:12px;font-weight:700;
+    color:#374151;letter-spacing:.3px;
+    text-transform:uppercase;margin-bottom:4px;
+}
+.tr-divider{
+    border:none;border-top:1px solid #e5e7eb;
+    margin:18px 0;
+}
+
+/* ── Upload CTA button ── */
+.tr-upload-wrap button{
+    background:#10b981!important;
+    color:#fff!important;
+    border:none!important;
+    border-radius:12px!important;
+    padding:16px 24px!important;
+    font-size:15px!important;
+    font-weight:800!important;
+    width:100%!important;
+    letter-spacing:.2px!important;
+    box-shadow:0 6px 20px rgba(16,185,129,.38)!important;
+    transition:all .22s!important;
+    min-height:54px!important;
+}
+.tr-upload-wrap button:hover:not(:disabled){
+    background:#059669!important;
+    box-shadow:0 10px 28px rgba(16,185,129,.48)!important;
+    transform:translateY(-2px)!important;
+}
+.tr-upload-wrap button:disabled{
+    background:#cbd5e1!important;color:#94a3b8!important;
+    box-shadow:none!important;transform:none!important;
+}
+
+/* ── Connect button ── */
+.tr-connect-wrap button{
+    background:#6366f1!important;
+    color:#fff!important;
+    border:none!important;
+    border-radius:10px!important;
+    padding:12px 24px!important;
+    font-size:14px!important;
+    font-weight:700!important;
+    box-shadow:0 4px 14px rgba(99,102,241,.3)!important;
+    transition:all .2s!important;
+}
+.tr-connect-wrap button:hover{
+    background:#4f46e5!important;
+    box-shadow:0 6px 20px rgba(99,102,241,.42)!important;
+    transform:translateY(-1px)!important;
+}
+
+/* ══════════════════════════════════════════
+   MISC — file uploader, data editor
+══════════════════════════════════════════ */
+[data-testid="stFileUploader"]{
+    border:2px dashed #dbe3ea!important;
+    border-radius:12px!important;
+    background:#f8fafc!important;
+    padding:8px!important;
+}
+[data-testid="stFileUploader"]:hover{border-color:#ef4444!important}
+
+button[kind="secondary"]{
+    border-radius:10px!important;
+    border:1.5px solid #dbe3ea!important;
+    color:#374151!important;
+    font-weight:600!important;
+    transition:all .18s!important;
+}
+button[kind="secondary"]:hover{
+    border-color:#ef4444!important;
+    color:#ef4444!important;
+    background:#fff5f5!important;
+}
+
+[data-testid="stDataEditor"]{
+    border:1px solid #dbe3ea!important;
+    border-radius:12px!important;
+    overflow:hidden!important;
+}
+
+/* selectbox labels */
+[data-testid="stSelectbox"] label{
+    font-size:12px!important;font-weight:700!important;
+    color:#374151!important;letter-spacing:.3px!important;
+    text-transform:uppercase!important;
+}
+</style>""", unsafe_allow_html=True)
+
+    # ─────────────────────────── STATE DEFAULTS ───────────────────────
     st.session_state.setdefault("attachments_text", "")
     st.session_state.setdefault("attachments_meta", [])
     st.session_state.setdefault("use_attachments", True)
@@ -320,27 +634,75 @@ with tab1:
     st.session_state.setdefault("tab1_do_reset", False)
     st.session_state.setdefault("tab1_input_mode", None)
     st.session_state.setdefault("tab1_last_upload_signature", ())
+    st.session_state.setdefault("test_types", ["Positivas", "Negativas"])
+    st.session_state.setdefault("detail_level", "Detallado")
+    st.session_state.setdefault("output_format", "TestRail")
+    st.session_state.setdefault("t1_show_testrail", False)
 
-    st.markdown("### ¿Cómo quieres ingresar la información base?")
-    modo_ingreso = st.selectbox(
-        "Selecciona el origen del contexto",
-        options=["Texto", "Documento"],
-        index=None,
-        placeholder="Selecciona una opción",
-        key="tab1_input_mode",
-        help="Elige Texto para escribir el requerimiento manualmente o Documento para cargar archivos y procesarlos automáticamente.",
-    )
-
-    usar_adj = modo_ingreso == "Documento"
+    modo_ingreso   = st.session_state.get("tab1_input_mode")
+    usar_adj       = modo_ingreso == "Documento"
     st.session_state["use_attachments"] = usar_adj
 
-    if modo_ingreso == "Texto":
-        st.info("✍️ Escribe el contexto funcional y luego genera los escenarios.")
-    elif modo_ingreso == "Documento":
-        st.info("📄 Carga uno o más archivos. Se procesarán automáticamente apenas se adjunten.")
-    else:
-        st.caption("Primero selecciona si deseas trabajar con texto o con documento.")
+    tiene_texto    = bool(st.session_state.get("texto_funcional", "").strip())
+    tiene_adjuntos = bool(st.session_state.get("attachments_text", ""))
+    input_listo    = (modo_ingreso == "Texto" and tiene_texto) or \
+                     (modo_ingreso == "Documento" and tiene_adjuntos)
+    ya_generado    = bool(st.session_state.get("generado", False))
 
+    # ─────────────────────────── STEP BAR ─────────────────────────────
+    STEP_NAMES = ["Fuente", "Contexto", "Generar", "Preview", "TestRail"]
+
+    def _sstate(n):
+        if n == 1: return "done" if modo_ingreso else "active"
+        if n == 2:
+            if not modo_ingreso: return "pending"
+            return "done" if input_listo else "active"
+        if n == 3:
+            if not input_listo: return "pending"
+            return "done" if ya_generado else "active"
+        if n == 4: return "active" if ya_generado else "pending"
+        if n == 5: return "active" if ya_generado else "pending"
+        return "pending"
+
+    bar_html = '<div class="wz-bar">'
+    for i, name in enumerate(STEP_NAMES):
+        s     = _sstate(i + 1)
+        icon  = "✓" if s == "done" else str(i + 1)
+        l_cls = f"done" if s == "done" else ("active" if s == "active" else "")
+        bar_html += (
+            f'<div class="wz-step">'
+            f'<div class="wz-circle {s}">{icon}</div>'
+            f'<div class="wz-lbl {l_cls}">{name}</div>'
+            f'<div class="wz-line {"done" if s=="done" else ""}"></div>'
+            f'</div>'
+        )
+    bar_html += '</div>'
+    st.markdown(bar_html, unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════
+    # STEP 1 — FUENTE
+    # ══════════════════════════════════════════════════════════════
+    st.markdown('<div class="qa-card-hdr">① Selecciona la fuente de información</div>', unsafe_allow_html=True)
+
+    CARDS = [
+        ("Texto libre", "📝", "Escribe el requerimiento\no historia de usuario", "Texto"),
+        ("Documento",   "📄", "Sube PDF, DOCX, XLSX,\nimágenes y más",           "Documento"),
+    ]
+
+    _gap_l, col_a, col_b, _gap_r = st.columns([1, 3, 3, 1], gap="small")
+    for col, (title, icon, desc, mode_val) in zip([col_a, col_b], CARDS):
+        is_sel  = (modo_ingreso == mode_val)
+        wrap    = "sc-sel" if is_sel else "sc-wrap"
+        btn_key = f"src_card_{mode_val}"
+        with col:
+            st.markdown(f'<div class="{wrap}">', unsafe_allow_html=True)
+            lbl = f"{icon} **{title}**\n\n{desc}"
+            if st.button(lbl, key=btn_key, use_container_width=True):
+                st.session_state["tab1_input_mode"] = mode_val
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+
+    # ─────────────────────────── HELPER: procesar uploads ─────────────
     def _procesar_uploads_tab1(archivos_subidos):
         if not archivos_subidos:
             st.session_state["attachments_text"] = ""
@@ -351,11 +713,9 @@ with tab1:
             from utils_ingest import consolidate_attachments
         except Exception:
             consolidate_attachments = None
-
         if consolidate_attachments is None:
-            st.error("❌ Falta utils_ingest.consolidate_attachments en el entorno.")
+            st.error("❌ Falta utils_ingest.consolidate_attachments.")
             return False
-
         files = [(f.name, f.getvalue()) for f in archivos_subidos]
         txt, metas = consolidate_attachments(files, max_chars=60_000)
         st.session_state["attachments_text"] = txt or ""
@@ -365,525 +725,528 @@ with tab1:
         )
         return True
 
+    # ══════════════════════════════════════════════════════════════
+    # STEP 2 — INPUT
+    # ══════════════════════════════════════════════════════════════
     uploads = []
-    if modo_ingreso == "Texto":
-        # ---- TextArea de entrada (NO sobrescribir session_state luego) ----
-        texto_funcional = st.text_area(
-            "Texto funcional original",
-            value=st.session_state.get("texto_funcional", ""),
-            height=250,
-            key="texto_funcional"
-        )  # ← no reasignes st.session_state["texto_funcional"] más abajo
-    elif modo_ingreso == "Documento":
-        st.markdown("### Adjuntar documentos e imágenes")
-        uploads = st.file_uploader(
-            "PDF, DOCX, TXT, CSV, XLSX, PNG, JPG, WEBP, TIFF",
-            type=["pdf","docx","txt","csv","xlsx","png","jpg","jpeg","webp","tiff"],
-            accept_multiple_files=True,
-            key=f"tab1_uploader_{st.session_state['tab1_uploader_nonce']}"
-        )
+    if modo_ingreso:
+        st.markdown('<div class="qa-card-hdr">② Contexto de entrada</div>', unsafe_allow_html=True)
 
-        firmas_actuales = tuple((f.name, len(f.getvalue())) for f in uploads) if uploads else ()
-        if uploads and firmas_actuales != st.session_state.get("tab1_last_upload_signature", ()):
-            with st.spinner("📄 Procesando adjuntos automáticamente..."):
-                if _procesar_uploads_tab1(uploads):
-                    st.success(f"Procesado: {len(st.session_state['attachments_meta'])} archivo(s).")
-        elif not uploads and st.session_state.get("tab1_last_upload_signature"):
-            _procesar_uploads_tab1([])
-
-        colA, colB = st.columns([1, 1])
-        with colA:
-            st.caption("Los adjuntos procesados se usarán automáticamente para generar los escenarios.")
-        with colB:
-            if st.button("🔄 Reprocesar documentos", key="btn_procesar_adjuntos"):
-                if uploads:
-                    with st.spinner("📄 Reprocesando adjuntos..."):
-                        if _procesar_uploads_tab1(uploads):
-                            st.success(f"Procesado: {len(st.session_state['attachments_meta'])} archivo(s).")
-                else:
-                    st.info("No seleccionaste archivos.")
-
-    # ---- Metadatos de adjuntos (si existen) ----
-    if modo_ingreso == "Documento" and st.session_state["attachments_meta"]:
-        with st.expander("Fuentes procesadas", expanded=False):
-            for m in st.session_state["attachments_meta"]:
-                st.caption(
-                    f"• {m['filename']} ({m['ext']}, {m['size_bytes']} bytes) — "
-                    f"{m['sha1_8']} — {m['chars']} chars"
-                )
-
-    # ---- Preview paginado (colapsable) ----
-    if modo_ingreso == "Documento":
-        st.markdown("### Preview paginado del documento")
-        if uploads:
-            for i, f in enumerate(uploads, start=1):
-                bytes_f = f.getvalue() if hasattr(f, "getvalue") else f.read()
-                preview_document_paginado_inline(
-                    file_label=f"Archivo {i}: {f.name}",
-                    file_name=f.name,
-                    file_bytes=bytes_f,
-                    tipo=("pdf" if f.name.lower().endswith(".pdf") else "texto"),
-                    key_ns="t1",
-                    collapsible=True,
-                    expanded=False
-                )
-        elif st.session_state.get("attachments_text"):
-            preview_document_paginado_inline(
-                file_label="Texto consolidado de adjuntos",
-                file_name="adjuntos.txt",
-                text_extraido=st.session_state["attachments_text"],
-                tipo="texto",
-                key_ns="t1",
-                collapsible=True,
-                expanded=False
+        if modo_ingreso == "Texto":
+            st.text_area(
+                "Contexto funcional",
+                height=220,
+                key="texto_funcional",
+                placeholder=(
+                    "Ejemplo:\n"
+                    "Como usuario registrado quiero poder iniciar sesión con correo y contraseña.\n\n"
+                    "Reglas de negocio:\n"
+                    "• El email es obligatorio y debe tener formato válido\n"
+                    "• La contraseña debe tener mínimo 8 caracteres\n"
+                    "• Tras 3 intentos fallidos la cuenta se bloquea temporalmente"
+                ),
+                label_visibility="collapsed",
             )
-        else:
-            st.caption("Sube archivos para ver aquí el preview paginado automáticamente.")
-    elif modo_ingreso == "Texto":
-        st.caption("Selecciona la opción **Documento** si prefieres generar escenarios a partir de archivos.")
+            chars = len(st.session_state.get("texto_funcional", ""))
+            if chars > 0:
+                st.caption(f"📊 {chars:,} caracteres · ~{chars // 5} palabras")
 
-    st.markdown("---")
+        elif modo_ingreso == "Documento":
+            uploads = st.file_uploader(
+                "Arrastra o selecciona archivos (PDF, DOCX, XLSX, imágenes…)",
+                type=["pdf","docx","txt","csv","xlsx","png","jpg","jpeg","webp","tiff"],
+                accept_multiple_files=True,
+                key=f"tab1_uploader_{st.session_state['tab1_uploader_nonce']}",
+                label_visibility="collapsed",
+            )
+            firmas_act = tuple((f.name, len(f.getvalue())) for f in uploads) if uploads else ()
+            if uploads and firmas_act != st.session_state.get("tab1_last_upload_signature", ()):
+                with st.spinner("📄 Procesando documentos..."):
+                    if _procesar_uploads_tab1(uploads):
+                        n = len(st.session_state["attachments_meta"])
+                        st.success(f"✅ {n} archivo(s) procesados correctamente.")
+            elif not uploads and st.session_state.get("tab1_last_upload_signature"):
+                _procesar_uploads_tab1([])
 
-    def _normalizar_type(valor):
-        t = str(valor).strip().lower()
-        if not t:
-            return "Funcional"
-        if "valid" in t:
-            return "Validacion"
-        if "integr" in t or "api" in t or "servicio" in t or "motor" in t:
-            return "Integracion"
-        if "segur" in t or "permis" in t or "autoriz" in t or "rol" in t:
-            return "Seguridad"
-        if "usab" in t or "ux" in t or "mensaje" in t:
-            return "Usabilidad"
-        if "func" in t or "regla" in t or "negocio" in t or "calculo" in t:
-            return "Funcional"
-        return "Funcional"
-
-    def _normalizar_title(valor):
-        titulo = str(valor or "").strip()
-        if not titulo:
-            return ""
-
-        # Quitar prefijos de enumeracion/labels tecnicos del modelo
-        patrones = [
-            r"^(?:SCENARIO|ESCENARIO|CASO(?:\s+DE\s+PRUEBA)?|TEST\s*CASE|TC)\s*[_:\-#]*\s*[\d\.]*\s*[:\-]*\s*",
-            r"^\s*[\d]+\s*[\)\.\-:]\s*",
-        ]
-        for patron in patrones:
-            titulo = re.sub(patron, "", titulo, flags=re.IGNORECASE).strip()
-
-        # Limpieza final de separadores sobrantes
-        titulo = re.sub(r"^[\s\-\:\._]+", "", titulo).strip()
-        return titulo
-
-    def _normalizar_priority(valor):
-        p = str(valor).strip().lower()
-        if not p:
-            return "Media"
-        if "alta" in p or "high" in p or "critical" in p:
-            return "Alta"
-        if "baja" in p or "low" in p:
-            return "Baja"
-        return "Media"
-
-    def _normalizar_df_generado(df_in):
-        df_out = df_in.copy()
-
-        for c in ["Title", "Preconditions", "Steps", "Expected Result"]:
-            if c in df_out.columns:
-                df_out[c] = df_out[c].apply(lambda x: x.strip() if isinstance(x, str) else x)
-
-        if "Title" in df_out.columns:
-            df_out["Title"] = df_out["Title"].apply(_normalizar_title)
-
-        if "Type" in df_out.columns:
-            df_out["Type"] = df_out["Type"].apply(_normalizar_type)
-        if "Priority" in df_out.columns:
-            df_out["Priority"] = df_out["Priority"].apply(_normalizar_priority)
-
-        requeridas = [c for c in ["Title", "Steps", "Expected Result"] if c in df_out.columns]
-        if requeridas:
-            mask = pd.Series([True] * len(df_out))
-            for c in requeridas:
-                mask = mask & df_out[c].astype(str).str.strip().ne("")
-            df_out = df_out.loc[mask].copy()
-
-        if "Title" in df_out.columns:
-            df_out = df_out.drop_duplicates(subset=["Title"], keep="first")
-
-        return df_out.reset_index(drop=True)
-
-    def _estimar_rango_casos(texto_base: str):
-        txt = (texto_base or "").strip()
-        chars = len(txt)
-
-        if chars < 800:
-            objetivo = 10
-        elif chars < 2_000:
-            objetivo = 14
-        elif chars < 5_000:
-            objetivo = 18
-        elif chars < 10_000:
-            objetivo = 24
-        else:
-            objetivo = 30
-
-        patrones_complejidad = [
-            r"\bvalid", r"\bregla", r"\berror", r"\bpermis", r"\brol",
-            r"\bintegr", r"\bapi", r"\bservicio", r"\bsegur", r"\bl[ií]mite",
-            r"\bmin", r"\bmax", r"\bc[aá]lcul", r"\btasa", r"\bplazo",
-            r"\bgradiente", r"\breestruct", r"\bauditor", r"\bnegativ"
-        ]
-        hits = sum(1 for p in patrones_complejidad if re.search(p, txt, flags=re.IGNORECASE))
-        objetivo += min(8, hits // 2)
-
-        objetivo = max(8, min(36, objetivo))
-        minimo_aceptable = max(6, objetivo - 5)
-        return minimo_aceptable, objetivo
-
-    tiene_texto = bool(st.session_state["texto_funcional"].strip())
-    tiene_adjuntos = bool(st.session_state.get("attachments_text"))
-    boton_habilitado = (
-        (modo_ingreso == "Texto" and tiene_texto) or
-        (modo_ingreso == "Documento" and tiene_adjuntos)
-    )
-
-    # ---- Generar escenarios ----
-    if st.button(
-        "Generar escenarios de prueba",
-        key="btn_generar_tab1",
-        disabled=not boton_habilitado,
-        help="Se habilita cuando ingresas texto o cuando se procesa al menos un documento."
-    ):
-        # 1) Si el modo documento tiene archivos y aún no se han consolidado, procesarlos automáticamente.
-        if usar_adj and uploads and not st.session_state.get("attachments_text"):
-            with st.spinner("📄 Procesando adjuntos antes de generar..."):
-                _procesar_uploads_tab1(uploads)
-
-        # 2) Validar segun el modo elegido
-        if modo_ingreso == "Texto" and not tiene_texto:
-            st.warning("⚠️ Ingresa el texto funcional para generar los escenarios.")
-        elif modo_ingreso == "Documento" and not tiene_adjuntos:
-            st.warning("⚠️ Adjunta al menos un documento válido para generar los escenarios.")
-        else:
-            try:
-                # Construir entrada segun el modo seleccionado
-                if modo_ingreso == "Documento":
-                    texto_entrada = st.session_state.get("attachments_text", "").strip()
-                else:
-                    texto_entrada = st.session_state["texto_funcional"].strip()
-
-                with st.spinner("🧠 Preparando contexto para generación..."):
-                    # Evita una llamada LLM adicional para ahorrar cuota.
-                    descripcion_refinada = limitar_texto_para_gemini(texto_entrada, max_chars=5000)
-                st.session_state["descripcion_refinada"] = descripcion_refinada
-
-                with st.spinner("📄 Generando escenarios CSV profesionales..."):
-                    min_casos_aceptables, objetivo_casos = _estimar_rango_casos(texto_entrada)
-                    max_intentos_generacion = 3 if objetivo_casos >= 24 else 2
-                    texto_csv_raw = ""
-                    df = pd.DataFrame()
-
-                    for intento_gen in range(1, max_intentos_generacion + 1):
-                        titulos_previos = []
-                        if not df.empty and "Title" in df.columns:
-                            titulos_previos = df["Title"].astype(str).tolist()
-
-                        respuesta_csv = enviar_a_gemini(
-                            prompt_generar_escenarios_profesionales(
-                                descripcion_refinada,
-                                contexto_original=texto_entrada,
-                                target_cases=objetivo_casos,
-                                min_cases=min_casos_aceptables,
-                                titulos_excluir=titulos_previos
-                            )
-                        )
-                        texto_csv_raw = extraer_texto_de_respuesta_gemini(respuesta_csv).strip()
-
-                        # Limpieza y normalización CSV → DF
-                        csv_limpio = limpiar_markdown_csv(texto_csv_raw)
-                        csv_valido = limpiar_csv_con_formato(csv_limpio, columnas_esperadas=6)
-                        csv_corregido = corregir_csv_con_comas(csv_valido, columnas_objetivo=6)
-
-                        df_intento = pd.read_csv(io.StringIO(csv_corregido))
-                        df_intento = df_intento.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-                        df_intento = _normalizar_df_generado(df_intento)
-
-                        if "Steps" in df_intento.columns:
-                            df_intento["Steps"] = df_intento["Steps"].apply(normalizar_steps).str.replace(r'\\n', '\n', regex=True)
-                        if "Preconditions" in df_intento.columns:
-                            df_intento["Preconditions"] = df_intento["Preconditions"].apply(normalizar_preconditions)
-                        df_intento["Estado"] = "Pendiente"
-
-                        total_antes = len(df)
-                        if df.empty:
-                            df = df_intento.copy()
+            metas = st.session_state.get("attachments_meta", [])
+            if metas:
+                c_meta, c_rep = st.columns([4, 1])
+                with c_meta:
+                    for m in metas:
+                        kb = round(m["size_bytes"] / 1024, 1)
+                        st.caption(f"📎 **{m['filename']}** — {m['ext'].upper()} · {kb} KB · {m['chars']:,} chars")
+                with c_rep:
+                    if st.button("🔄 Reprocesar", key="btn_reprocesar"):
+                        if uploads:
+                            with st.spinner("Reprocesando…"):
+                                _procesar_uploads_tab1(uploads)
                         else:
-                            if "Title" in df.columns and "Title" in df_intento.columns:
-                                existentes = set(df["Title"].astype(str).str.strip().str.lower())
-                                nuevos = df_intento[
-                                    ~df_intento["Title"].astype(str).str.strip().str.lower().isin(existentes)
-                                ].copy()
-                            else:
-                                nuevos = df_intento.copy()
-                            df = pd.concat([df, nuevos], ignore_index=True)
-                        crecieron = len(df) - total_antes
+                            st.info("Sin archivos.")
 
-                        if len(df) >= objetivo_casos:
-                            break
+            if uploads:
+                with st.expander("📑 Preview de documentos", expanded=False):
+                    for i, f in enumerate(uploads, 1):
+                        bts = f.getvalue() if hasattr(f, "getvalue") else f.read()
+                        preview_document_paginado_inline(
+                            file_label=f"Archivo {i}: {f.name}",
+                            file_name=f.name, file_bytes=bts,
+                            tipo="pdf" if f.name.lower().endswith(".pdf") else "texto",
+                            key_ns="t1", collapsible=False, expanded=False,
+                        )
+            elif st.session_state.get("attachments_text"):
+                with st.expander("📑 Preview del texto consolidado", expanded=False):
+                    preview_document_paginado_inline(
+                        file_label="Texto consolidado",
+                        file_name="adjuntos.txt",
+                        text_extraido=st.session_state["attachments_text"],
+                        tipo="texto", key_ns="t1", collapsible=False,
+                    )
 
-                        if intento_gen > 1 and crecieron == 0:
-                            break
+        # ─────────────────────────── NORMALIZERS ──────────────────────
+        def _normalizar_type(valor):
+            t = str(valor).strip().lower()
+            if not t: return "Funcional"
+            if "valid" in t: return "Validacion"
+            if any(x in t for x in ("integr","api","servicio","motor")): return "Integracion"
+            if any(x in t for x in ("segur","permis","autoriz","rol")): return "Seguridad"
+            if any(x in t for x in ("usab","ux","mensaje")): return "Usabilidad"
+            return "Funcional"
 
-                        if intento_gen < max_intentos_generacion:
-                            st.warning(
-                                f"⚠️ Cobertura parcial ({len(df)} casos acumulados). "
-                                "Reintentando generación para ampliar casos..."
+        def _normalizar_title(valor):
+            tit = str(valor or "").strip()
+            if not tit: return ""
+            # 1) Eliminar prefijos semánticos al inicio: "Validación:", "Regla:", etc.
+            _PREFIJOS = (
+                r"manejo\s+de\s+error",
+                r"validaci[oó]n",
+                r"regla",
+                r"error",
+                r"escenario",
+                r"caso(?:\s+de\s+prueba)?",
+                r"caso",
+            )
+            tit = re.sub(
+                r"^(?:" + "|".join(_PREFIJOS) + r")\s*:\s*",
+                "", tit, flags=re.IGNORECASE,
+            ).strip()
+            # 2) Eliminar prefijos estructurales: SCENARIO, TC, numeraciones…
+            for pat in [
+                r"^(?:SCENARIO|TEST\s*CASE|TC)\s*[_:\-#]*\s*[\d\.]*\s*[:\-]*\s*",
+                r"^\s*[\d]+\s*[\)\.\-:]\s*",
+            ]:
+                tit = re.sub(pat, "", tit, flags=re.IGNORECASE).strip()
+            # 3) Limpiar caracteres residuales al inicio y capitalizar primera letra
+            tit = re.sub(r"^[\s\-\:\._]+", "", tit).strip()
+            return tit[:1].upper() + tit[1:] if tit else ""
+
+        def _normalizar_priority(valor):
+            p = str(valor).strip().lower()
+            if not p: return "Media"
+            if any(x in p for x in ("alta","high","critical")): return "Alta"
+            if any(x in p for x in ("baja","low")): return "Baja"
+            return "Media"
+
+        def _normalizar_df_generado(df_in):
+            df_out = df_in.copy()
+            for c in ["Title","Preconditions","Steps","Expected Result"]:
+                if c in df_out.columns:
+                    df_out[c] = df_out[c].apply(lambda x: x.strip() if isinstance(x,str) else x)
+            if "Title"    in df_out.columns: df_out["Title"]    = df_out["Title"].apply(_normalizar_title)
+            if "Type"     in df_out.columns: df_out["Type"]     = df_out["Type"].apply(_normalizar_type)
+            if "Priority" in df_out.columns: df_out["Priority"] = df_out["Priority"].apply(_normalizar_priority)
+            req = [c for c in ["Title","Steps","Expected Result"] if c in df_out.columns]
+            if req:
+                mask = pd.Series([True]*len(df_out))
+                for c in req:
+                    mask = mask & df_out[c].astype(str).str.strip().ne("")
+                df_out = df_out.loc[mask].copy()
+            if "Title" in df_out.columns:
+                df_out = df_out.drop_duplicates(subset=["Title"], keep="first")
+            return df_out.reset_index(drop=True)
+
+        def _estimar_rango_casos(texto_base: str):
+            txt   = (texto_base or "").strip()
+            chars = len(txt)
+            if   chars < 800:    obj = 10
+            elif chars < 2_000:  obj = 14
+            elif chars < 5_000:  obj = 18
+            elif chars < 10_000: obj = 24
+            else:                obj = 30
+            pats = [r"\bvalid",r"\bregla",r"\berror",r"\bpermis",r"\brol",r"\bintegr",
+                    r"\bapi",r"\bservicio",r"\bsegur",r"\bl[ií]mite",r"\bmin",r"\bmax",
+                    r"\bc[aá]lcul",r"\btasa",r"\bplazo",r"\bgradiente",r"\breestruct",
+                    r"\bauditor",r"\bnegativ"]
+            hits = sum(1 for p in pats if re.search(p, txt, flags=re.IGNORECASE))
+            obj += min(8, hits // 2)
+            obj  = max(8, min(36, obj))
+            return max(6, obj - 5), obj
+
+        # ══════════════════════════════════════════════════════════════
+        # STEP 3 — GENERAR
+        # ══════════════════════════════════════════════════════════════
+        tiene_texto    = bool(st.session_state.get("texto_funcional", "").strip())
+        tiene_adjuntos = bool(st.session_state.get("attachments_text", ""))
+        input_listo    = (modo_ingreso == "Texto" and tiene_texto) or \
+                         (modo_ingreso == "Documento" and tiene_adjuntos)
+
+        texto_base = (
+            st.session_state.get("attachments_text","") if modo_ingreso == "Documento"
+            else st.session_state.get("texto_funcional","")
+        )
+        st.markdown('<div class="qa-card-hdr">③ Generar escenarios</div>', unsafe_allow_html=True)
+
+        gc_left, _gc_right = st.columns([3, 1])
+        with gc_left:
+            hint = (
+                "El modelo generará los escenarios realmente justificables por el contexto."
+                if input_listo
+                else "Completa el paso 2 para habilitar la generación."
+            )
+            st.markdown(
+                f'<p style="color:#6b7280;font-size:13px;margin-bottom:10px">{hint}</p>',
+                unsafe_allow_html=True
+            )
+            st.markdown('<div class="gen-wrap">', unsafe_allow_html=True)
+            generar_clicked = st.button(
+                "⚡  Generar escenarios",
+                key="btn_generar_tab1",
+                disabled=not input_listo,
+                use_container_width=True,
+                help="Se habilita cuando ingresas texto o cuando se procesa al menos un documento.",
+            )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── Lógica de generación ──────────────────────────────────────
+        texto_csv_raw = ""
+        if generar_clicked:
+            if usar_adj and uploads and not st.session_state.get("attachments_text"):
+                with st.spinner("📄 Procesando adjuntos…"):
+                    _procesar_uploads_tab1(uploads)
+            if modo_ingreso == "Texto" and not tiene_texto:
+                st.warning("⚠️ Ingresa el contexto funcional.")
+            elif modo_ingreso == "Documento" and not tiene_adjuntos:
+                st.warning("⚠️ Adjunta al menos un documento válido.")
+            else:
+                try:
+                    texto_entrada = (
+                        st.session_state.get("attachments_text","").strip()
+                        if modo_ingreso == "Documento"
+                        else st.session_state["texto_funcional"].strip()
+                    )
+                    with st.spinner("🧠 Preparando contexto…"):
+                        descripcion_refinada = limitar_texto_para_gemini(texto_entrada, max_chars=5000)
+                    st.session_state["descripcion_refinada"] = descripcion_refinada
+
+                    with st.spinner("📄 Generando escenarios…"):
+                        texto_csv_raw = ""
+                        df = pd.DataFrame()
+                        # Reintentos solo ante respuesta vacía, CSV inválido o columnas faltantes
+                        MAX_REINTENTOS = 2
+                        COLS_REQUERIDAS = {"Title", "Steps", "Expected Result"}
+
+                        for intento in range(1, MAX_REINTENTOS + 1):
+                            resp = enviar_a_gemini(
+                                prompt_generar_escenarios_profesionales(
+                                    descripcion_refinada,
+                                    contexto_original=texto_entrada,
+                                    target_cases=None,
+                                    min_cases=None,
+                                    titulos_excluir=[],
+                                )
                             )
+                            texto_csv_raw = extraer_texto_de_respuesta_gemini(resp).strip()
 
-                    if len(df) < min_casos_aceptables:
-                        st.warning(
-                            f"⚠️ Se generaron {len(df)} casos tras {max_intentos_generacion} intentos. "
-                            f"Rango esperado por contexto: {min_casos_aceptables}-{objetivo_casos}."
-                        )
-                    elif len(df) < objetivo_casos:
-                        st.info(
-                            f"ℹ️ Se generaron {len(df)} casos reales según el contexto disponible. "
-                            f"Objetivo estimado: {objetivo_casos}."
-                        )
+                            # Reintento por respuesta vacía
+                            if not texto_csv_raw:
+                                if intento < MAX_REINTENTOS:
+                                    continue
+                                break
 
-                st.session_state.df_editable = df
-                st.session_state.generado = True
-                origen_generacion = (
-                    "Generación inicial (con adjuntos)"
-                    if modo_ingreso == "Documento" and bool(st.session_state.get("attachments_text"))
-                    else "Generación inicial"
+                            try:
+                                csv_clean = limpiar_csv_con_formato(
+                                    limpiar_markdown_csv(texto_csv_raw), columnas_esperadas=6
+                                )
+                                csv_fixed = corregir_csv_con_comas(csv_clean, columnas_objetivo=6)
+                                df_it = pd.read_csv(io.StringIO(csv_fixed))
+                                df_it = df_it.applymap(lambda x: x.strip() if isinstance(x,str) else x)
+                                df_it = _normalizar_df_generado(df_it)
+                            except Exception:
+                                # Reintento por CSV inválido / error de parsing
+                                if intento < MAX_REINTENTOS:
+                                    continue
+                                break
+
+                            # Reintento por columnas esenciales faltantes
+                            if not COLS_REQUERIDAS.issubset(set(df_it.columns)):
+                                if intento < MAX_REINTENTOS:
+                                    continue
+                                break
+
+                            # Reintento por resultado vacío tras normalización
+                            if df_it.empty:
+                                if intento < MAX_REINTENTOS:
+                                    continue
+                                break
+
+                            if "Steps" in df_it.columns:
+                                df_it["Steps"] = df_it["Steps"].apply(normalizar_steps).str.replace(r'\\n','\n',regex=True)
+                            if "Preconditions" in df_it.columns:
+                                df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
+                            df_it["Estado"] = "Pendiente"
+                            df = df_it.copy()
+                            break  # CSV válido y con datos — no reintentar
+
+                    st.session_state.df_editable = df
+                    st.session_state.generado    = True
+                    st.session_state["historial_generaciones"].append({
+                        "fecha":       datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "fuente":      "QA",
+                        "origen":      "Generación inicial (con adjuntos)" if usar_adj else "Generación inicial",
+                        "descripcion": descripcion_refinada,
+                        "escenarios":  df.copy(),
+                    })
+                    guardar_historial(st.session_state["historial_generaciones"])
+                    st.success(f"✅ Se generaron **{len(df)}** escenarios relevantes según el contexto.")
+                    st.caption("ℹ️ Se priorizó calidad y relevancia sobre cantidad.")
+
+                except Exception as exc:
+                    st.error(f"❌ Error durante la generación: {exc}")
+                    if texto_csv_raw:
+                        st.text_area("⚠️ CSV que causó error", texto_csv_raw, height=200)
+                    st.session_state.df_editable = None
+                    st.session_state.generado    = False
+
+        # ══════════════════════════════════════════════════════════════
+        # STEP 4 — RESULTADOS (tabla única: seleccionar + editar)
+        # ══════════════════════════════════════════════════════════════
+        if st.session_state.get("generado") and st.session_state.get("df_editable") is not None:
+            df_prev = st.session_state.df_editable
+            total   = len(df_prev)
+
+            BADGE = {
+                "Funcional":"bdg-g","Positiva":"bdg-g","Positivas":"bdg-g",
+                "Validacion":"bdg-r","Negativa":"bdg-r","Negativas":"bdg-r",
+                "Edge":"bdg-y","Seguridad":"bdg-p",
+                "Integracion":"bdg-b","Integración":"bdg-b","Usabilidad":"bdg-gr",
+            }
+
+            st.markdown('<div class="qa-card-hdr">④ Resultados — revisa, selecciona y edita</div>', unsafe_allow_html=True)
+
+            # Resumen con pills y badges
+            type_cnt = df_prev["Type"].value_counts().to_dict() if "Type" in df_prev.columns else {}
+            pills_html = f'<span class="pill">Total: <b>{total}</b></span>'
+            for t, c in type_cnt.items():
+                pills_html += f'<span class="bdg {BADGE.get(t,"bdg-gr")}">{t}: {c}</span>'
+            st.markdown(pills_html, unsafe_allow_html=True)
+
+            # Fila de botones superiores
+            ac1, ac2, _ac3 = st.columns([2, 2, 3])
+            with ac1:
+                if st.button("🔄 Regenerar", key="btn_regen"):
+                    st.session_state.generado    = False
+                    st.session_state.df_editable = None
+                    st.rerun()
+            with ac2:
+                st.caption(f"**{total}** escenarios generados")
+
+            # ── Preparar df de trabajo ──────────────────────────────
+            df_work = df_prev.copy()
+            if "Estado" not in df_work.columns:
+                df_work["Estado"] = "Pendiente"
+            if "Steps" in df_work.columns:
+                df_work["Steps"] = df_work["Steps"].apply(normalizar_steps)
+            if "Expected Result" in df_work.columns:
+                df_work["Expected Result"] = df_work["Expected Result"].apply(normalizar_steps)
+            if "Preconditions" in df_work.columns:
+                df_work["Preconditions"] = df_work["Preconditions"].apply(normalizar_preconditions)
+            df_work.reset_index(drop=True, inplace=True)
+            if "✓" not in df_work.columns:
+                df_work.insert(0, "✓", True)
+
+            # ── TABLA ÚNICA: selección + edición inline ─────────────
+            edited_unified = st.data_editor(
+                df_work,
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "✓":        st.column_config.CheckboxColumn("✓", default=True, width="small"),
+                    "Priority": st.column_config.SelectboxColumn("Priority", options=["Alta", "Media", "Baja"]),
+                    "Type":     st.column_config.SelectboxColumn("Type", options=["Funcional", "Validación", "Usabilidad", "Integración", "Seguridad"]),
+                    "Estado":   st.column_config.SelectboxColumn("Estado", options=["Pendiente", "Listo", "Descartado"]),
+                },
+                key="t1_data_editor_unified",
+            )
+
+            # Guardar estado de edición (sin la columna ✓)
+            df_sin_check = edited_unified.drop(columns=["✓"], errors="ignore")
+            st.session_state.df_editable = df_sin_check
+
+            # Estadística de selección
+            sel_mask = edited_unified["✓"] == True
+            n_sel    = int(sel_mask.sum())
+            st.caption(f"**{n_sel}** de **{len(edited_unified)}** seleccionados")
+
+            # Botones de acción sobre la tabla
+            ca1, ca2, _ca3 = st.columns([2, 2, 3])
+            with ca1:
+                if st.button(
+                    f"✅ Aplicar {n_sel} seleccionados",
+                    key="btn_aplicar_sel",
+                    disabled=n_sel == 0,
+                ):
+                    df_aplicado = edited_unified[sel_mask].drop(columns=["✓"]).reset_index(drop=True)
+                    st.session_state.df_editable = df_aplicado
+                    st.success(f"✅ {len(df_aplicado)} escenarios aplicados.")
+            with ca2:
+                if st.button("✅ Marcar todos como listos", key="btn_marcar_listos"):
+                    df_sin_check["Estado"] = "Listo"
+                    st.session_state.df_editable = df_sin_check
+                    st.success("Todos los escenarios marcados como listos.")
+
+            # ══════════════════════════════════════════════════════════
+            # STEP 5 — TESTRAIL
+            # ══════════════════════════════════════════════════════════
+            df_subir = st.session_state.get("df_editable")
+            _tr_vacio = df_subir is None or df_subir.empty
+
+            # ── Header TestRail ──
+            st.markdown(
+                '''<div class="tr-header" style="border-radius:12px;margin-bottom:16px">
+                  <div class="tr-header-title">⑤ Publicar en TestRail</div>
+                  <div class="tr-header-sub">Selecciona dónde publicar los casos generados</div>
+                </div>''',
+                unsafe_allow_html=True,
+            )
+
+            if _tr_vacio:
+                st.info("ℹ️ Aplica los escenarios seleccionados (paso ④) para habilitar la subida.")
+            else:
+                n_subir = len(df_subir)
+                st.markdown(
+                    f'<div class="tr-summary">'
+                    f'<span style="font-size:22px">📋</span>'
+                    f'<span><strong>{n_subir}</strong> caso{"s" if n_subir != 1 else ""} listo{"s" if n_subir != 1 else ""} para publicar</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
 
-                st.session_state["historial_generaciones"].append({
-                    "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "fuente": "QA",
-                    "origen": origen_generacion,
-                    "descripcion": descripcion_refinada,
-                    "escenarios": df.copy()
-                })
+                if not st.session_state.get("t1_show_testrail"):
+                    st.markdown('<div class="tr-connect-wrap">', unsafe_allow_html=True)
+                    if st.button("🔌 Conectar con TestRail", key="btn_open_tr"):
+                        st.session_state["t1_show_testrail"] = True
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    with st.spinner("Conectando a TestRail…"):
+                        proy_raw = obtener_proyectos()
 
-            except Exception as e:
-                st.error(f"❌ Error durante el proceso: {e}")
-                st.text_area("⚠️ CSV que causó error", texto_csv_raw if 'texto_csv_raw' in locals() else "", height=250)
-                st.session_state.df_editable = None
-                st.session_state.generado = False
+                    if not (isinstance(proy_raw, dict) and "projects" in proy_raw):
+                        st.error("❌ Error al conectar con TestRail.")
+                    else:
+                        proyectos = proy_raw["projects"]
+                        tr1, tr2, tr3 = st.columns(3)
 
-    # ---- Tabla paginada de escenarios generados ----
-    if st.session_state.get("df_editable") is not None:
-        render_df_paginado(
-            st.session_state.df_editable,
-            key_prefix="t1",
-            filas_por_pagina=20,
-            titulo="✅ Escenarios generados (vista paginada)"
-        )
+                        with tr1:
+                            sel_p = st.selectbox("Proyecto", [p["name"] for p in proyectos], key="t1_tr_proy")
+                            id_p  = next((p["id"] for p in proyectos if p["name"] == sel_p), None)
 
-    # ---- Limpiar todo (dispara reset en el siguiente run) ----
+                        suites = []
+                        if id_p:
+                            sr = obtener_suites(id_p)
+                            suites = sr["suites"] if isinstance(sr,dict) and "suites" in sr else (sr if isinstance(sr,list) else [])
+
+                        with tr2:
+                            if suites:
+                                sel_s = st.selectbox("Suite", [s["name"] for s in suites], key="t1_tr_suite")
+                                id_s  = next((s["id"] for s in suites if s["name"] == sel_s), None)
+                            else:
+                                st.info("Sin suites disponibles.")
+                                sel_s = ""; id_s = None
+
+                        secs = []
+                        if id_p and id_s:
+                            secr = obtener_secciones(id_p, id_s)
+                            secs = secr["sections"] if isinstance(secr,dict) and "sections" in secr else (secr if isinstance(secr,list) else [])
+
+                        with tr3:
+                            if secs:
+                                sel_sec = st.selectbox("Sección", [s["name"] for s in secs], key="t1_tr_sec")
+                                id_sec  = next((s["id"] for s in secs if s["name"] == sel_sec), None)
+                            else:
+                                st.info("Sin secciones disponibles.")
+                                sel_sec = ""; id_sec = None
+
+                        if id_sec:
+                            st.markdown('<hr class="tr-divider">', unsafe_allow_html=True)
+                            st.markdown(
+                                f'<div class="tr-summary" style="background:#f0fdf4;border-color:#bbf7d0">'
+                                f'<span style="font-size:18px">📤</span>'
+                                f'<span><strong style="color:#059669">{n_subir}</strong> casos &nbsp;→&nbsp;'
+                                f'<span class="tr-badge" style="background:#d1fae5;color:#065f46">{sel_p}</span>'
+                                f'<span class="tr-badge" style="background:#d1fae5;color:#065f46">{sel_s}</span>'
+                                f'<span class="tr-badge" style="background:#d1fae5;color:#065f46">{sel_sec}</span>'
+                                f'</span></div>',
+                                unsafe_allow_html=True,
+                            )
+                            st.markdown('<div class="tr-upload-wrap">', unsafe_allow_html=True)
+                            if st.button("✅ Subir casos a TestRail", key="t1_btn_subir", use_container_width=True):
+                                st.session_state["t1_confirm"] = {
+                                    "proyecto":sel_p, "suite":sel_s, "seccion":sel_sec,
+                                    "section_id":id_sec, "total":n_subir,
+                                }
+                                st.rerun()
+                            st.markdown('</div>', unsafe_allow_html=True)
+
+                            ctx = st.session_state.get("t1_confirm")
+                            if ctx:
+                                st.warning(f"⚠️ ¿Confirmas subir **{ctx['total']}** casos a **{ctx['seccion']}**?")
+                                cb1, cb2 = st.columns(2)
+                                with cb1:
+                                    if st.button("✅ Confirmar subida", key="t1_btn_confirm"):
+                                        with st.spinner("📡 Subiendo casos…"):
+                                            res = enviar_a_testrail(ctx["section_id"], df_subir)
+                                        st.session_state.pop("t1_confirm", None)
+                                        if res["exito"]:
+                                            st.success(f"✅ {res['subidos']} casos subidos correctamente.")
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ {res['subidos']} de {res['total']} subidos.")
+                                            if res["detalle"]:
+                                                with st.expander("Ver detalles del error"):
+                                                    for e in res["detalle"]: st.write(e)
+                                with cb2:
+                                    if st.button("❌ Cancelar", key="t1_btn_cancel"):
+                                        st.session_state.pop("t1_confirm", None)
+                                        st.rerun()
+
+
+    # ─────────────────────────── LIMPIAR ──────────────────────────────
+    st.markdown('<br>', unsafe_allow_html=True)
     if st.button("🧹 Limpiar todo", key="btn_limpiar_tab1"):
-        st.session_state["tab1_do_reset"] = True
-        st.success("Se limpiará el contenido del Tab 1, adjuntos, preview y Sugerencias.")
+        st.session_state["tab1_do_reset"]   = True
+        st.session_state["tab1_input_mode"] = None
+        st.session_state["t1_show_testrail"] = False
         st.rerun()
 
 
 
-
+# --------------------------- HISTORIAL ---------------------------
 with tab2:
-    titulo_seccion("Editar escenarios generados", "🛠️")
-
-    if not st.session_state.get("generado") or st.session_state.get("df_editable") is None:
-        st.info("ℹ️ No hay escenarios generados para editar.")
-    else:
-        df = st.session_state.df_editable.copy()
-
-        # Agregar columna de estado si no existe
-        if "Estado" not in df.columns:
-            df["Estado"] = "Pendiente"
-
-        # Normalización de Steps, Expected y Preconditions
-        if "Steps" in df.columns:
-            df["Steps"] = df["Steps"].apply(normalizar_steps)
-        if "Expected Result" in df.columns:
-            df["Expected Result"] = df["Expected Result"].apply(normalizar_steps)
-        if "Preconditions" in df.columns:
-            df["Preconditions"] = df["Preconditions"].apply(normalizar_preconditions)
-
-        df.reset_index(drop=True, inplace=True)
-
-        edited_df = st.data_editor(
-            df,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Priority": st.column_config.SelectboxColumn("Priority", options=["Alta", "Media", "Baja"]),
-                "Type": st.column_config.SelectboxColumn("Type", options=["Funcional", "Validación", "Usabilidad", "Integración", "Seguridad"]),
-                "Estado": st.column_config.SelectboxColumn("Estado", options=["Pendiente", "Listo", "Descartado"])
-            }
-        )
-
-        st.session_state.df_editable = edited_df
-
-        # Botón para marcar todos como listos
-        if st.button("✅ Marcar todos como listos"):
-            edited_df["Estado"] = "Listo"
-            st.session_state.df_editable = edited_df
-            st.success("Todos los escenarios han sido marcados como listos.")
-
-
-# --------------------------- TAB 3: REVISAR / SUGERENCIAS ---------------------------
-with tab3:
-    st.subheader("💡 Sugerencias de nuevos escenarios a partir del análisis actual")
-
-    df_actual = st.session_state.get("df_editable")
-    if df_actual is None or df_actual.empty:
-        st.info("ℹ️ No hay escenarios generados aún.")
-    else:
-        # Tomamos solo los estados de interés y las columnas necesarias
-        columnas_base = ["Title", "Preconditions", "Steps", "Expected Result"]
-        cols_presentes = [c for c in columnas_base if c in df_actual.columns]
-        df_revisar = (
-            df_actual.loc[df_actual["Estado"].isin(["Pendiente", "Listo"]), cols_presentes]
-            .copy()
-        )
-
-        if df_revisar.empty:
-            st.info("ℹ️ No hay datos para evaluar.")
-        else:
-            st.dataframe(df_revisar, use_container_width=True)
-
-            # CSV de contexto para el LLM
-            contexto_csv = df_revisar.to_csv(index=False)
-
-            if st.button("🔍 Evaluar sugerencias", key="btn_eval_sug"):
-                try:
-                    prompt = {
-                        "contents": [
-                            {
-                                "parts": [
-                                    {
-                                        "text": (
-                                            "Eres un Analista QA Senior especializado en diseño de pruebas funcionales.\n\n"
-                                            "A partir del CSV de escenarios existente, sugiere nuevos casos COMPLEMENTARIOS "
-                                            "(sin repetir los actuales) y devuélvelos en **CSV puro** con columnas EXACTAS:\n"
-                                            "Title,Preconditions,Steps,Expected Result\n\n"
-                                            "REGLAS DE SALIDA (obligatorias):\n"
-                                            "- SOLO imprime el CSV (sin explicaciones, sin markdown, sin texto adicional).\n"
-                                            "- Usa comas como separador; si un campo contiene comas o saltos de línea, ENCERRAR en comillas dobles.\n"
-                                            "- Steps numerados como '1. ', '2. ', '3. ', cada uno en su propia línea usando \\n dentro de la celda.\n"
-                                            "- Genera 4–8 casos nuevos, profesionales y no redundantes con el contexto.\n\n"
-                                            "PRECONDITIONS (formato y contenido OBLIGATORIOS):\n"
-                                            "- Deben ir **enumeradas** y en **líneas separadas dentro de la misma celda** usando \\n.\n"
-                                            "- Sigue SIEMPRE este patrón (según aplique por el escenario):\n"
-                                            "  1. Aplicación disponible y sesión iniciada\n"
-                                            "  2. Usuario con permisos para <ACCIÓN inferida de los Steps>\n"
-                                            "  3. Existen <DATOS DE NEGOCIO requeridos> (p. ej., asiento contable X, movimientos en rango, cliente válido)\n"
-                                            "  4. Servicios de <MÓDULO/SUBMÓDULO> <operativos | NO operativos (si el caso es negativo por indisponibilidad)>\n"
-                                            "- Inferir **<ACCIÓN>** desde los Steps (mapa típico):\n"
-                                            "    consultar/ver → 'consultar'; exportar/descargar → 'exportar';\n"
-                                            "    generar reporte → 'consultar y generar reportes'; acceder → 'acceder al módulo';\n"
-                                            "    crear/editar/eliminar → 'crear/editar/eliminar <objeto>' según corresponda.\n"
-                                            "- Si los Steps implican error por caída/indisponibilidad → usa 'NO operativos'; de lo contrario 'operativos'.\n"
-                                            "- Prohibido: 'Ninguna', 'N/A', o solo 'Usuario con sesión iniciada' sin permisos ni datos.\n\n"
-                                            "CHECKLIST interno antes de responder (NO imprimir):\n"
-                                            "- ¿Permisos alineados con la acción principal de los Steps? ✔\n"
-                                            "- ¿Datos de negocio explícitos y realistas? ✔\n"
-                                            "- ¿Servicios correctamente marcados operativos/NO operativos según el objetivo del caso? ✔\n"
-                                            "- ¿Preconditions enumeradas con '\\n' dentro de la celda y sin duplicados? ✔\n\n"
-                                            "Contexto (CSV existente):\n"
-                                            f"{contexto_csv}"
-                                        )
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-
-                    # Llama a Gemini y limpia salida
-                    respuesta = enviar_a_gemini(prompt)
-                    texto_raw = extraer_texto_de_respuesta_gemini(respuesta)
-                    texto_csv = limpiar_markdown_csv(texto_raw)
-
-                    # Cargar sugerencias (4 columnas)
-                    df_sugerencias = leer_csv_seguro(texto_csv, columnas_esperadas=4)
-
-                    # No normalizamos Precondition localmente: dejamos el formato tal como viene de Gemini
-                    # (sí limpiamos Steps para garantizar saltos de línea visibles)
-                    if "Steps" in df_sugerencias.columns:
-                        df_sugerencias["Steps"] = df_sugerencias["Steps"].apply(normalizar_steps)
-
-                    # Completar metadatos faltantes para integrarse con el DF principal
-                    for c, dflt in [("Type", "Funcional"), ("Priority", "Media"), ("Estado", "Pendiente")]:
-                        if c not in df_sugerencias.columns:
-                            df_sugerencias[c] = dflt
-
-                    st.session_state["sugerencias_df"] = df_sugerencias
-                    st.success("✅ Sugerencias generadas.")
-                except Exception as e:
-                    st.error(f"❌ Error al generar sugerencias: {e}")
-
-    # Render de sugerencias si existen
-    df_sugerencias = st.session_state.get("sugerencias_df")
-    if isinstance(df_sugerencias, pd.DataFrame) and not df_sugerencias.empty:
-        st.markdown("### 💡 Sugerencias de nuevos escenarios")
-        st.dataframe(df_sugerencias, use_container_width=True)
-
-        st.markdown("### ✅ Selecciona los escenarios que deseas aplicar:")
-        seleccion_indices = []
-        for i, row in df_sugerencias.iterrows():
-            titulo = str(row.get("Title", f"Escenario {i}")).strip()
-            if st.checkbox(titulo, key=f"t3_sug_{i}"):
-                seleccion_indices.append(i)
-
-        hay_seleccion = len(seleccion_indices) > 0
-
-        if st.button("➕ Aplicar escenarios seleccionados", key="btn_aplicar_sug", disabled=not hay_seleccion):
-            try:
-                df_aplicar = df_sugerencias.loc[seleccion_indices].copy()
-
-                # Evitar duplicados por Title contra el DF actual
-                titulos_existentes = set(st.session_state["df_editable"]["Title"].astype(str))
-                df_aplicar = df_aplicar[~df_aplicar["Title"].astype(str).isin(titulos_existentes)]
-
-                if df_aplicar.empty:
-                    st.info("ℹ️ Todos los seleccionados ya estaban aplicados o no hay nuevos.")
-                else:
-                    # Alinear columnas con df_editable
-                    cols_destino = list(st.session_state["df_editable"].columns)
-                    for c in cols_destino:
-                        if c not in df_aplicar.columns:
-                            df_aplicar[c] = ""  # relleno vacío para columnas faltantes
-                    df_aplicar = df_aplicar[cols_destino]
-
-                    # Actualiza el DF principal
-                    st.session_state["df_editable"] = pd.concat(
-                        [st.session_state["df_editable"], df_aplicar], ignore_index=True
-                    )
-                    st.session_state["generado"] = True
-
-                    # Guarda en historial
-                    st.session_state.setdefault("historial_generaciones", [])
-                    st.session_state["historial_generaciones"].append({
-                        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "origen": "Sugerencias",
-                        "escenarios": df_aplicar.copy()
-                    })
-
-                    st.success(f"✅ {len(df_aplicar)} escenario(s) aplicados. Revisa 'Historial' y 'Subir a TestRail'.")
-            except Exception as e:
-                st.error(f"❌ Error al aplicar sugerencias: {e}")
-
-
-# --------------------------- TAB 4: HISTORIAL ---------------------------
-with tab4:
     if "historial_generaciones" not in st.session_state:
-        st.session_state["historial_generaciones"] = []
+        st.session_state["historial_generaciones"] = cargar_historial()
 
     historial = st.session_state["historial_generaciones"]
+
+    _col_hdr, _col_del = st.columns([7, 2])
+    with _col_hdr:
+        st.markdown("### 📚 Historial de generaciones")
+    with _col_del:
+        if st.button("🗑️ Borrar historial", key="btn_borrar_historial"):
+            st.session_state["historial_generaciones"] = []
+            guardar_historial([])
+            st.success("✅ Historial borrado.")
+            st.rerun()
 
     if not historial:
         st.info(
@@ -921,111 +1284,3 @@ with tab4:
             st.session_state.df_editable = item["escenarios"].copy()
             st.success("✅ Escenarios restaurados.")
             st.rerun()
-
-# --------------------------- TAB 5: SUBIR A TESTRAIL ---------------------------
-# --------------------------- TAB 5: SUBIR A TESTRAIL ---------------------------
-with tab5:
-    st.subheader("🚀 Subir casos a TestRail")
-
-    # 📡 Obtener proyectos desde TestRail
-    proyectos_raw = obtener_proyectos()
-
-    # 🛡️ Validación segura del formato
-    if isinstance(proyectos_raw, dict) and "projects" in proyectos_raw:
-        proyectos = proyectos_raw["projects"]
-    else:
-        st.error("❌ Formato inesperado al recibir proyectos.")
-        st.stop()
-
-    # 🎛️ Selector de proyecto
-    sel_proy = st.selectbox("Proyecto", [p["name"] for p in proyectos], key="select_proy")
-    id_proy = next((p["id"] for p in proyectos if p["name"] == sel_proy), None)
-
-    # 📢 Mostrar anuncio del proyecto (si existe)
-    anuncio = next((p.get("announcement") for p in proyectos if p["id"] == id_proy), None)
-    if anuncio:
-        st.info(f"📢 {anuncio}")
-
-    # 📁 Obtener suites del proyecto
-    suites_raw = obtener_suites(id_proy)
-    if isinstance(suites_raw, dict) and "suites" in suites_raw:
-        suites = suites_raw["suites"]
-    elif isinstance(suites_raw, list):
-        suites = suites_raw
-    else:
-        st.error("❌ Error al recibir suites desde TestRail.")
-        st.json(suites_raw)
-        st.stop()
-
-    sel_suite = st.selectbox("Suite", [s["name"] for s in suites], key="select_suite")
-    suite_id = next((s["id"] for s in suites if s["name"] == sel_suite), None)
-
-    # 📂 Obtener secciones de la suite
-    secciones_raw = obtener_secciones(id_proy, suite_id)
-    if isinstance(secciones_raw, dict) and "sections" in secciones_raw:
-        secciones = secciones_raw["sections"]
-    elif isinstance(secciones_raw, list):
-        secciones = secciones_raw
-    else:
-        st.error("❌ Error al recibir secciones desde TestRail.")
-        st.json(secciones_raw)
-        st.stop()
-
-    sel_seccion = st.selectbox("Sección", [s["name"] for s in secciones], key="select_seccion")
-    section_id = next((s["id"] for s in secciones if s["name"] == sel_seccion), None)
-
-    # ✅ Validar si hay escenarios generados para subir
-    df = st.session_state.get("df_editable")
-
-    if df is not None and section_id:
-        st.markdown("### 🧪 Vista previa de los casos a subir")
-        st.dataframe(df, use_container_width=True)
-
-        # —————————————————— CONFIRMACIÓN EN DOS PASOS ——————————————————
-        # 1) Primer click: pedir confirmación y guardar selección
-        if st.button("📤 Subir casos a TestRail", key="btn_subir_preconfirm"):
-            st.session_state["confirm_subida"] = {
-                "proyecto": sel_proy,
-                "suite": sel_suite,
-                "seccion": sel_seccion,
-                "section_id": section_id,
-                "total": len(df)
-            }
-            st.rerun()
-
-        # 2) Si hay confirmación pendiente, mostrar resumen + Confirmar/Cancelar
-        confirm_ctx = st.session_state.get("confirm_subida")
-        if confirm_ctx:
-            st.markdown("#### 🔎 Confirma antes de subir")
-            st.info(
-                f"**Proyecto:** {confirm_ctx['proyecto']}\n\n"
-                f"**Suite:** {confirm_ctx['suite']}\n\n"
-                f"**Sección:** {confirm_ctx['seccion']}\n\n"
-                f"**Casos a subir:** {confirm_ctx['total']}"
-            )
-            c1, c2 = st.columns(2)
-            with c1:
-                if st.button("✅ Confirmar subida", key="btn_confirmar_subida"):
-                    with st.spinner("📡 Subiendo casos..."):
-                        resultado = enviar_a_testrail(confirm_ctx["section_id"], df)  # usa mapping title/custom_*
-
-                    # Limpiar estado de confirmación
-                    st.session_state.pop("confirm_subida", None)
-
-                    if resultado["exito"]:
-                        st.success(f"✅ {resultado['subidos']} casos subidos correctamente.")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Solo se subieron {resultado['subidos']} de {resultado['total']} casos.")
-                        if resultado["detalle"]:
-                            with st.expander("🔍 Ver detalles del error"):
-                                for err in resultado["detalle"]:
-                                    st.write(err)
-            with c2:
-                if st.button("❌ Cancelar", key="btn_cancelar_subida"):
-                    st.session_state.pop("confirm_subida", None)
-                    st.toast("Operación cancelada", icon="❌")
-                    st.rerun()
-        # ——————————————————————————————————————————————————————————————
-    else:
-        st.info("Genera los casos en el Tab '✏️ Generar' y selecciona Proyecto, Suite y Sección.")

@@ -1,5 +1,3 @@
-import re
-
 import pandas as pd
 import requests
 import streamlit as st
@@ -71,11 +69,6 @@ def _construir_payload_caso(fila) -> dict:
     tipo = _s(fila.get("Type", "Funcional"))
     prio = _s(fila.get("Priority", "Media"))
 
-    # Oráculo breve y distinto del expected
-    oracle = _oraculo_breve_sin_duplicar(title, steps, expected)
-    if not oracle:
-        oracle = "Regla: validar condición de aceptación sin duplicar el resultado esperado."
-
     return {
         "title": title,
         "refs": _refs_desde_fila(fila),
@@ -84,7 +77,7 @@ def _construir_payload_caso(fila) -> dict:
         "custom_expected": expected,
         "custom_type": tipo,
         "custom_priority": prio,
-        "custom_case_oracle": oracle,  # <- aquí el campo obligatorio
+        "custom_case_oracle": "QA",
     }
 
 def _post_case(url: str, datos: dict):
@@ -94,32 +87,6 @@ def _es_error_refs_faltante(response) -> bool:
     texto = _s(response.text).replace('\\"', '"')
     return response.status_code == 500 and 'Undefined array key "refs"' in texto
 
-def _oraculo_breve_sin_duplicar(title: str, steps: str, expected: str) -> str:
-    """
-    Genera un oráculo corto (regla verificable) que NO sea igual al Expected.
-    - Si el expected habla de 'obligatorio'/'no se envía', convertirlo a regla genérica.
-    - Si sigue quedando idéntico, usar una regla de validación compacta.
-    """
-    t = _s(title).lower()
-    s = _s(steps).lower()
-    e = _s(expected).strip()
-
-    # Heurísticas simples para casos comunes
-    if re.search(r"obligatori|requerid", e.lower()) or "no se envía" in e.lower():
-        # intenta extraer el campo implicado del título o pasos
-        m = re.search(r"(campo|nombre)\s*['“\"]?([^'”\"]+)['”\"]?", t) or \
-            re.search(r"(campo|nombre)\s*['“\"]?([^'”\"]+)['”\"]?", s)
-        campo = m.group(2) if m else "el campo requerido"
-        oracle = f"Regla: si falta {campo}, el formulario debe bloquear el envío y mostrar validación."
-    else:
-        # Regla general corta basada en título
-        oracle = f"Regla: { _s(title) } cumple condición de aceptación sin persistir datos inválidos."
-
-    # Evita igualdad exacta con Expected
-    if oracle.strip().lower() == e.strip().lower():
-        oracle = "Regla: validar mensaje y bloqueo en ausencia de dato requerido."
-
-    return oracle
 
 def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     url = f"{TESTRAIL_DOMAIN}/index.php?/api/v2/add_case/{section_id}"
@@ -130,11 +97,9 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
 
         try:
             r = _post_case(url, datos)
-            if _es_error_refs_faltante(r) and not datos["refs"]:
-                # Compatibilidad defensiva: algunos gateways descartan strings vacíos.
-                datos["refs"] = " "
-                r = _post_case(url, datos)
-            if r.status_code in (200, 201):
+            # TestRail crea el caso incluso cuando devuelve 500 por refs vacío,
+            # por lo que reintentar causaría duplicados. Lo tratamos como éxito.
+            if r.status_code in (200, 201) or _es_error_refs_faltante(r):
                 exitosos += 1
             else:
                 errores.append(f"Fila {i}: {r.status_code} - {r.text}")
