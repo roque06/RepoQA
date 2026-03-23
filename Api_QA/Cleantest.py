@@ -1,9 +1,19 @@
 # ============================ Cleantest.py (LIMPIO + PATCH + HEADER FIX) ============================
 import io
+import json
+import os
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
-import io, re, json, os
+
+_CURRENT_DIR = Path(__file__).resolve().parent
+if str(_CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_CURRENT_DIR))
+
 from utils_ingest import consolidate_attachments
 
 # ──── Persistencia del historial ────────────────────────────────────────────
@@ -62,7 +72,7 @@ from auth_ui import SecureShell
 from utils_ui import titulo_seccion, spinner_accion
 from utils_csv import (
     limpiar_markdown_csv, normalizar_preconditions, corregir_csv_con_comas,
-    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro,
+    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro, limpiar_texto_qa,
     detectar_y_separar_escenarios_compuestos,
 )
 from utils_testrail import (
@@ -71,6 +81,12 @@ from utils_testrail import (
 from utils_gemini import (
     enviar_a_gemini, extraer_texto_de_respuesta_gemini,
     prompt_generar_escenarios_profesionales, limitar_texto_para_gemini
+)
+from qa_engine import (
+    analyze_document_structure,
+    parse_gemini_json_response,
+    summarize_analysis_for_prompt,
+    validate_and_prepare_scenarios,
 )
 
 # 3) Login + tamaños independientes
@@ -95,6 +111,8 @@ st.session_state.setdefault("df_editable", None)
 st.session_state.setdefault("generado", False)
 st.session_state.setdefault("texto_funcional", "")
 st.session_state.setdefault("descripcion_refinada", "")
+st.session_state.setdefault("analisis_documento", {})
+st.session_state.setdefault("ultima_validacion_qa", {})
 
 # Tabs principales
 tab1, tab2 = st.tabs(["✏️ Generar", "📚 Historial"])
@@ -285,6 +303,8 @@ if st.session_state.get("tab1_do_reset", False):
     st.session_state["df_editable"]       = None
     st.session_state["generado"]          = False
     st.session_state["descripcion_refinada"] = ""
+    st.session_state["analisis_documento"] = {}
+    st.session_state["ultima_validacion_qa"] = {}
     st.session_state["tab1_input_mode"]   = None
     st.session_state["t1_show_testrail"]  = False
 
@@ -839,7 +859,7 @@ button[kind="secondary"]:hover{
             ]:
                 tit = re.sub(pat, "", tit, flags=re.IGNORECASE).strip()
             # 3) Limpiar caracteres residuales al inicio y capitalizar primera letra
-            tit = re.sub(r"^[\s\-\:\._]+", "", tit).strip()
+            tit = limpiar_texto_qa(re.sub(r"^[\s\-\:\._]+", "", tit).strip())
             return tit[:1].upper() + tit[1:] if tit else ""
 
         def _normalizar_priority(valor):
@@ -853,7 +873,7 @@ button[kind="secondary"]:hover{
             df_out = df_in.copy()
             for c in ["Title","Preconditions","Steps","Expected Result"]:
                 if c in df_out.columns:
-                    df_out[c] = df_out[c].apply(lambda x: x.strip() if isinstance(x,str) else x)
+                    df_out[c] = df_out[c].apply(lambda x: limpiar_texto_qa(x) if isinstance(x, str) else x)
             if "Title"    in df_out.columns: df_out["Title"]    = df_out["Title"].apply(_normalizar_title)
             if "Type"     in df_out.columns: df_out["Type"]     = df_out["Type"].apply(_normalizar_type)
             if "Priority" in df_out.columns: df_out["Priority"] = df_out["Priority"].apply(_normalizar_priority)
@@ -920,7 +940,7 @@ button[kind="secondary"]:hover{
             st.markdown('</div>', unsafe_allow_html=True)
 
         # ── Lógica de generación ──────────────────────────────────────
-        texto_csv_raw = ""
+        respuesta_modelo_raw = ""
         if generar_clicked:
             if usar_adj and uploads and not st.session_state.get("attachments_text"):
                 with st.spinner("📄 Procesando adjuntos…"):
@@ -936,56 +956,43 @@ button[kind="secondary"]:hover{
                         if modo_ingreso == "Documento"
                         else st.session_state["texto_funcional"].strip()
                     )
-                    with st.spinner("🧠 Preparando contexto…"):
-                        descripcion_refinada = limitar_texto_para_gemini(texto_entrada, max_chars=5000)
+                    with st.spinner("🧠 Analizando documento…"):
+                        analisis_documento = analyze_document_structure(texto_entrada)
+                        descripcion_refinada = summarize_analysis_for_prompt(analisis_documento)
                     st.session_state["descripcion_refinada"] = descripcion_refinada
+                    st.session_state["analisis_documento"] = analisis_documento
 
                     with st.spinner("📄 Generando escenarios…"):
-                        texto_csv_raw = ""
+                        respuesta_modelo_raw = ""
                         df = pd.DataFrame()
-                        # Reintentos solo ante respuesta vacía, CSV inválido o columnas faltantes
                         MAX_REINTENTOS = 2
-                        COLS_REQUERIDAS = {"Title", "Steps", "Expected Result"}
 
                         for intento in range(1, MAX_REINTENTOS + 1):
                             resp = enviar_a_gemini(
                                 prompt_generar_escenarios_profesionales(
                                     descripcion_refinada,
                                     contexto_original=texto_entrada,
-                                    target_cases=None,
-                                    min_cases=None,
+                                    target_cases=_estimar_rango_casos(texto_entrada)[1],
+                                    min_cases=_estimar_rango_casos(texto_entrada)[0],
                                     titulos_excluir=[],
+                                    analisis_documento=analisis_documento,
                                 )
                             )
-                            texto_csv_raw = extraer_texto_de_respuesta_gemini(resp).strip()
+                            respuesta_modelo_raw = extraer_texto_de_respuesta_gemini(resp).strip()
 
-                            # Reintento por respuesta vacía
-                            if not texto_csv_raw:
+                            if not respuesta_modelo_raw:
                                 if intento < MAX_REINTENTOS:
                                     continue
                                 break
 
                             try:
-                                csv_clean = limpiar_csv_con_formato(
-                                    limpiar_markdown_csv(texto_csv_raw), columnas_esperadas=6
-                                )
-                                csv_fixed = corregir_csv_con_comas(csv_clean, columnas_objetivo=6)
-                                df_it = pd.read_csv(io.StringIO(csv_fixed))
-                                df_it = df_it.applymap(lambda x: x.strip() if isinstance(x,str) else x)
-                                df_it = _normalizar_df_generado(df_it)
+                                payload = parse_gemini_json_response(respuesta_modelo_raw)
+                                df_it, metadata_validacion = validate_and_prepare_scenarios(payload)
                             except Exception:
-                                # Reintento por CSV inválido / error de parsing
                                 if intento < MAX_REINTENTOS:
                                     continue
                                 break
 
-                            # Reintento por columnas esenciales faltantes
-                            if not COLS_REQUERIDAS.issubset(set(df_it.columns)):
-                                if intento < MAX_REINTENTOS:
-                                    continue
-                                break
-
-                            # Reintento por resultado vacío tras normalización
                             if df_it.empty:
                                 if intento < MAX_REINTENTOS:
                                     continue
@@ -995,13 +1002,11 @@ button[kind="secondary"]:hover{
                                 df_it["Steps"] = df_it["Steps"].apply(normalizar_steps).str.replace(r'\\n','\n',regex=True)
                             if "Preconditions" in df_it.columns:
                                 df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
+                            if "Expected Result" in df_it.columns:
+                                df_it["Expected Result"] = df_it["Expected Result"].apply(limpiar_texto_qa)
                             df_it["Estado"] = "Pendiente"
-                            # ── Post-proceso de atomicidad ──────────────────────────────
-                            # Separa escenarios que mezclan múltiples validaciones distintas
-                            # en un solo Expected Result. Opera sin romper el formato actual.
-                            df_it = detectar_y_separar_escenarios_compuestos(df_it)
-                            # ────────────────────────────────────────────────────────────
                             df = df_it.copy()
+                            st.session_state["ultima_validacion_qa"] = metadata_validacion
                             break  # CSV válido y con datos — no reintentar
 
                     st.session_state.df_editable = df
@@ -1011,16 +1016,21 @@ button[kind="secondary"]:hover{
                         "fuente":      "QA",
                         "origen":      "Generación inicial (con adjuntos)" if usar_adj else "Generación inicial",
                         "descripcion": descripcion_refinada,
+                        "analisis_documento": analisis_documento,
                         "escenarios":  df.copy(),
                     })
                     guardar_historial(st.session_state["historial_generaciones"])
                     st.success(f"✅ Se generaron **{len(df)}** escenarios relevantes según el contexto.")
                     st.caption("ℹ️ Se priorizó calidad y relevancia sobre cantidad.")
+                    if st.session_state.get("ultima_validacion_qa", {}).get("dropped"):
+                        st.caption(
+                            f"ℹ️ Se descartaron {len(st.session_state['ultima_validacion_qa']['dropped'])} escenarios por calidad/duplicidad antes de mostrar el resultado."
+                        )
 
                 except Exception as exc:
                     st.error(f"❌ Error durante la generación: {exc}")
-                    if texto_csv_raw:
-                        st.text_area("⚠️ CSV que causó error", texto_csv_raw, height=200)
+                    if respuesta_modelo_raw:
+                        st.text_area("⚠️ Respuesta del modelo que causó error", respuesta_modelo_raw, height=220)
                     st.session_state.df_editable = None
                     st.session_state.generado    = False
 
@@ -1064,7 +1074,7 @@ button[kind="secondary"]:hover{
             if "Steps" in df_work.columns:
                 df_work["Steps"] = df_work["Steps"].apply(normalizar_steps)
             if "Expected Result" in df_work.columns:
-                df_work["Expected Result"] = df_work["Expected Result"].apply(normalizar_steps)
+                df_work["Expected Result"] = df_work["Expected Result"].apply(limpiar_texto_qa)
             if "Preconditions" in df_work.columns:
                 df_work["Preconditions"] = df_work["Preconditions"].apply(normalizar_preconditions)
             df_work.reset_index(drop=True, inplace=True)
