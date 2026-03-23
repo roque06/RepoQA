@@ -72,7 +72,7 @@ from auth_ui import SecureShell
 from utils_ui import titulo_seccion, spinner_accion
 from utils_csv import (
     limpiar_markdown_csv, normalizar_preconditions, corregir_csv_con_comas,
-    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro,
+    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro, limpiar_texto_qa,
     detectar_y_separar_escenarios_compuestos,
 )
 from utils_testrail import (
@@ -849,7 +849,7 @@ button[kind="secondary"]:hover{
             ]:
                 tit = re.sub(pat, "", tit, flags=re.IGNORECASE).strip()
             # 3) Limpiar caracteres residuales al inicio y capitalizar primera letra
-            tit = re.sub(r"^[\s\-\:\._]+", "", tit).strip()
+            tit = limpiar_texto_qa(re.sub(r"^[\s\-\:\._]+", "", tit).strip())
             return tit[:1].upper() + tit[1:] if tit else ""
 
         def _normalizar_priority(valor):
@@ -863,7 +863,7 @@ button[kind="secondary"]:hover{
             df_out = df_in.copy()
             for c in ["Title","Preconditions","Steps","Expected Result"]:
                 if c in df_out.columns:
-                    df_out[c] = df_out[c].apply(lambda x: x.strip() if isinstance(x,str) else x)
+                    df_out[c] = df_out[c].apply(lambda x: limpiar_texto_qa(x) if isinstance(x, str) else x)
             if "Title"    in df_out.columns: df_out["Title"]    = df_out["Title"].apply(_normalizar_title)
             if "Type"     in df_out.columns: df_out["Type"]     = df_out["Type"].apply(_normalizar_type)
             if "Priority" in df_out.columns: df_out["Priority"] = df_out["Priority"].apply(_normalizar_priority)
@@ -1005,6 +1005,8 @@ button[kind="secondary"]:hover{
                                 df_it["Steps"] = df_it["Steps"].apply(normalizar_steps).str.replace(r'\\n','\n',regex=True)
                             if "Preconditions" in df_it.columns:
                                 df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
+                            if "Expected Result" in df_it.columns:
+                                df_it["Expected Result"] = df_it["Expected Result"].apply(limpiar_texto_qa)
                             df_it["Estado"] = "Pendiente"
                             # ── Post-proceso de atomicidad ──────────────────────────────
                             # Separa escenarios que mezclan múltiples validaciones distintas
@@ -1074,7 +1076,7 @@ button[kind="secondary"]:hover{
             if "Steps" in df_work.columns:
                 df_work["Steps"] = df_work["Steps"].apply(normalizar_steps)
             if "Expected Result" in df_work.columns:
-                df_work["Expected Result"] = df_work["Expected Result"].apply(normalizar_steps)
+                df_work["Expected Result"] = df_work["Expected Result"].apply(limpiar_texto_qa)
             if "Preconditions" in df_work.columns:
                 df_work["Preconditions"] = df_work["Preconditions"].apply(normalizar_preconditions)
             df_work.reset_index(drop=True, inplace=True)

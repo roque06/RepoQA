@@ -76,6 +76,11 @@ REGLAS DE SALIDA OBLIGATORIAS:
 - Redacta los pasos, precondiciones y resultados con datos concretos o neutros, sin muletillas de ejemplo.
 - NO uses identificadores ficticios o placeholders tecnicos como "ID_CLIENTE_001", "CTA_USD_001", "USR_ADMIN", "A2000" o similares.
 - Describe usuarios, clientes, cuentas y tarjetas en lenguaje natural, sin aliases internos inventados.
+- Regla de limpieza obligatoria: elimina cualquier contenido entre parentesis en Title, Preconditions, Steps y Expected Result.
+- No expongas identificadores tecnicos, codigos internos, IDs ni referencias técnicas.
+- Si una frase depende de un codigo entre parentesis, reemplazala por una descripcion funcional clara sin inventar informacion nueva.
+- Ejemplo: "Cuenta de Ahorro sin Libreta USD (Producto 202)" debe quedar como "Cuenta de Ahorro sin Libreta USD".
+- Ejemplo: "Plantilla contable (Tipo 79, Sub 605)" debe quedar como "Plantilla contable configurada".
 
 REGLA DE ATOMICIDAD — MUY IMPORTANTE:
 - Cada escenario debe tener UN SOLO objetivo verificable principal.
@@ -560,4 +565,3 @@ def obtener_descripcion_refinada(texto_funcional, max_intentos=3):
     # si llega aquÃ­, todos los intentos fallaron
 
     raise ValueError("âš ï¸ Gemini no devolviÃ³ descripciÃ³n vÃ¡lida tras varios intentos.")
-
