@@ -52,7 +52,26 @@ def prompt_generar_escenarios_profesionales(
     contexto_original = limitar_texto_para_gemini(contexto_original or "", max_chars=8000)
 
     prompt_text = f"""
-Eres un QA Senior especialista en pruebas funcionales y de negocio para sistemas financieros.
+Eres un QA Senior especialista en pruebas funcionales y de negocio.
+
+Tu tarea es interpretar cualquier documento de entrada como fuente para construir escenarios QA funcionales:
+- historias de usuario
+- casos de uso
+- requerimientos
+- documentos tecnicos
+- especificaciones de interfaces
+- manuales o descripciones operativas
+
+Aunque el documento tenga lenguaje tecnico, DEBES traducirlo a comportamiento funcional del sistema.
+NO describas configuraciones tecnicas, parametrizaciones internas, plantillas, tablas, subtransacciones, codigos ni pasos administrativos de setup como objetivo principal del caso.
+SIEMPRE prioriza escenarios utiles para QA real basados en:
+- acciones del usuario
+- respuestas del sistema
+- validaciones
+- reglas de negocio
+- errores controlados
+- integraciones
+- consultas, reportes o resultados visibles
 
 Devuelve SOLO CSV puro con encabezado exacto y estas columnas:
 Title,Preconditions,Steps,Expected Result,Type,Priority
@@ -70,24 +89,35 @@ REGLAS DE SALIDA OBLIGATORIAS:
 - Type solo puede ser: Funcional, Validacion, Integracion, Seguridad, Usabilidad.
 - Priority solo puede ser: Alta, Media, Baja.
 - En Type y Priority no agregues texto extra, comas ni saltos de linea.
+
+ENFOQUE FUNCIONAL OBLIGATORIO:
+- Interpreta el documento, NO lo copies literalmente.
+- Convierte detalles tecnicos en escenarios de negocio verificables.
+- Si el texto menciona configuracion interna, usala solo como contexto, no como titulo ni objetivo principal del escenario.
+- El titulo y el resultado esperado deben reflejar el comportamiento funcional observado por el usuario o por el negocio.
+- Prefiere escenarios como registro, consulta, validacion, calculo, aprobacion, rechazo, bloqueo, notificacion, integracion, generacion de reporte o actualizacion visible de datos.
+- Evita escenarios cuyo objetivo principal sea "configurar", "parametrizar", "mapear", "crear plantilla", "ajustar plantilla", "mantener catalogo", "registrar subtransaccion" o actividades tecnicas equivalentes.
+- Si una configuracion tecnica impacta el negocio, expresa el caso desde el efecto funcional final, no desde la configuracion.
+- Ejemplo incorrecto: "Configuracion de plantilla contable para compras".
+- Ejemplo correcto: "Registro de compra internacional en USD".
+
+REGLAS DE REDACCION:
 - En Title NO uses prefijos de enumeracion ni labels tecnicos: prohibido "SCENARIO", "Escenario", "Caso #", "TC-", numeros al inicio o codigos.
-- En Title usa estilo natural QA: frases cortas y especificas como "Validacion de ...", "Regla: ...", "Reestructuracion ...", "Integracion ...".
+- En Title usa estilo natural QA: frases cortas, funcionales y especificas.
 - NO incluyas ejemplos dentro del contenido: prohibido usar textos como "Ej:", "ej.", "por ejemplo" o valores ilustrativos entre parentesis.
 - Redacta los pasos, precondiciones y resultados con datos concretos o neutros, sin muletillas de ejemplo.
 - NO uses identificadores ficticios o placeholders tecnicos como "ID_CLIENTE_001", "CTA_USD_001", "USR_ADMIN", "A2000" o similares.
-- Describe usuarios, clientes, cuentas y tarjetas en lenguaje natural, sin aliases internos inventados.
+- No expongas identificadores tecnicos, codigos internos, IDs, cuentas, productos, subtransacciones ni referencias tecnicas.
+- Elimina cualquier contenido entre parentesis en Title, Preconditions, Steps y Expected Result.
+- Si una frase depende de un codigo o texto tecnico, reemplazalo por una descripcion funcional clara sin inventar informacion nueva.
+- Describe usuarios, clientes, cuentas y productos en lenguaje natural, sin aliases internos inventados.
 
 REGLA DE ATOMICIDAD — MUY IMPORTANTE:
 - Cada escenario debe tener UN SOLO objetivo verificable principal.
 - Prohibido combinar en un mismo escenario validaciones de naturaleza distinta.
-- Ejemplos de combinaciones PROHIBIDAS en un solo escenario:
-  * Visualizacion de datos + formato de moneda + botones de navegacion
-  * Validacion de campo + mensaje de error + comportamiento de sesion
-  * Carga de contenido + accesibilidad + seguridad de enlace
-  * Flujo exitoso + manejo de error + timeout
 - Si un criterio de aceptacion describe varias condiciones independientes, genera un escenario por cada condicion.
 - La prueba de que un escenario es atomico: su Expected Result describe UN estado o comportamiento concreto y medible, no una lista de verificaciones distintas.
-- Excepcion permitida: pasos de configuracion o contexto que son prerequisito directo del objetivo principal (van en Preconditions, no en Steps ni Expected Result).
+- Excepcion permitida: pasos de configuracion o contexto que son prerequisito directo del objetivo principal van en Preconditions, no en Steps ni Expected Result.
 
 OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Flujo feliz end-to-end.
@@ -96,27 +126,27 @@ OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Limites y valores frontera.
 - Integracion y fallas de servicios/dependencias.
 - Seguridad y permisos por rol.
-- Usabilidad/mensajeria de error/persistencia.
+- Usabilidad, mensajes de error y persistencia.
+- Reportes, consultas o evidencia visible cuando aplique.
 Si alguna categoria no aplica al contexto, no fuerces casos artificiales.
 Cuando una categoria aplica, crea UN escenario por cada comportamiento o regla distinta dentro de esa categoria.
 
 CRITERIO PROFESIONAL DE CALIDAD:
-- Evita casos duplicados o vagos.
+- Evita casos duplicados, vagos o demasiado tecnicos.
 - Cada caso debe tener un objetivo unico y verificable.
-- Expected Result debe ser medible y especifico (estado, calculo, mensaje o efecto en datos).
+- Expected Result debe ser medible y especifico.
 - El Expected Result describe una sola condicion de exito, no una lista de condiciones mezcladas.
-- Incluye variantes de datos y combinaciones de parametros (montos, tasas, plazos, gradientes, periodicidad, perfiles, estados).
-- Incluye escenarios negativos realistas (datos invalidos, reglas incumplidas, timeout, dependencias caidas).
-- Incluye casos de trazabilidad/auditoria cuando aplique.
-- Si necesitas mencionar un valor, usalo como dato directo del caso, no como ejemplo entre parentesis.
+- Incluye escenarios negativos realistas cuando el contexto lo permita.
+- Incluye reglas de negocio, errores funcionales e integraciones con impacto visible.
+- Si el documento contiene mucho detalle tecnico, filtra lo accesorio y conserva solo lo necesario para validar el comportamiento funcional.
 
 PRECONDITIONS (obligatorio):
 - Enumeradas en lineas separadas dentro de la misma celda (1., 2., 3...).
-- Deben cubrir: disponibilidad del sistema, permisos del usuario, datos de negocio y estado de servicios dependientes.
+- Deben cubrir disponibilidad del sistema, permisos del usuario, datos de negocio y estado de servicios dependientes cuando aplique.
 - Prohibido usar: Ninguna, N/A, o precondiciones genericas sin datos concretos.
 
 PRIORIZACION:
-- Alta para riesgos de negocio, calculo financiero, integridad de datos, seguridad y fallas de integracion.
+- Alta para riesgos de negocio, calculo, integridad de datos, seguridad, integraciones y errores criticos.
 - Media/Baja para variantes de menor impacto.
 
 Contexto funcional refinado:
@@ -560,4 +590,3 @@ def obtener_descripcion_refinada(texto_funcional, max_intentos=3):
     # si llega aquÃ­, todos los intentos fallaron
 
     raise ValueError("âš ï¸ Gemini no devolviÃ³ descripciÃ³n vÃ¡lida tras varios intentos.")
-
