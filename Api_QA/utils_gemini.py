@@ -16,6 +16,23 @@ SYSTEM_PROMPT_ES = """Eres un Arquitecto QA Senior especializado en transformar 
 Tu trabajo no es copiar el documento, sino interpretarlo con criterio funcional, técnico y de riesgo para producir cobertura QA útil en un entorno real."""
 
 
+def generar_escenarios_desde_contexto(contexto_total: str, metas: Optional[List[Dict]] = None) -> str:
+    """
+    Compatibilidad hacia atrás para módulos que todavía importan esta función.
+    Mantiene una interfaz estable mientras el flujo principal usa el pipeline
+    nuevo basado en análisis + JSON.
+    """
+    metas = metas or []
+    resumen_fuentes = ""
+    if metas:
+        resumen_fuentes = "Fuentes procesadas:\n" + "\n".join(
+            f"- {meta.get('filename', 'fuente')} [{meta.get('sha1_8', 'sin_hash')}]"
+            for meta in metas
+        )
+    contexto = limitar_texto_para_gemini(contexto_total or "", max_chars=4000)
+    return "\n\n".join(part for part in [SYSTEM_PROMPT_ES, resumen_fuentes, contexto] if part).strip()
+
+
 def _json_schema_hint() -> str:
     return """
 Devuelve SOLO JSON válido con esta estructura exacta:
