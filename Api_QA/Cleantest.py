@@ -1,9 +1,19 @@
 # ============================ Cleantest.py (LIMPIO + PATCH + HEADER FIX) ============================
 import io
+import json
+import os
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
-import io, re, json, os
+
+_CURRENT_DIR = Path(__file__).resolve().parent
+if str(_CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_CURRENT_DIR))
+
 from utils_ingest import consolidate_attachments
 
 # ──── Persistencia del historial ────────────────────────────────────────────
