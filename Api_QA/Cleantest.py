@@ -62,7 +62,8 @@ from auth_ui import SecureShell
 from utils_ui import titulo_seccion, spinner_accion
 from utils_csv import (
     limpiar_markdown_csv, normalizar_preconditions, corregir_csv_con_comas,
-    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro
+    normalizar_steps, limpiar_csv_con_formato, leer_csv_seguro,
+    detectar_y_separar_escenarios_compuestos,
 )
 from utils_testrail import (
     obtener_proyectos, obtener_suites, obtener_secciones, enviar_a_testrail
@@ -995,6 +996,11 @@ button[kind="secondary"]:hover{
                             if "Preconditions" in df_it.columns:
                                 df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
                             df_it["Estado"] = "Pendiente"
+                            # ── Post-proceso de atomicidad ──────────────────────────────
+                            # Separa escenarios que mezclan múltiples validaciones distintas
+                            # en un solo Expected Result. Opera sin romper el formato actual.
+                            df_it = detectar_y_separar_escenarios_compuestos(df_it)
+                            # ────────────────────────────────────────────────────────────
                             df = df_it.copy()
                             break  # CSV válido y con datos — no reintentar
 

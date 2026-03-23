@@ -415,3 +415,154 @@ def corregir_csv_gemini(csv_raw):
                 writer.writerow(fixed_row)
 
     return output.getvalue()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST-PROCESO DE ATOMICIDAD
+# Detecta escenarios que mezclan múltiples validaciones distintas en un solo
+# Expected Result y los separa en escenarios independientes.
+# Opera sobre el DataFrame ya parseado, ANTES de guardarlo en session_state.
+# No modifica escenarios con un único objetivo verificable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Dominios semánticos: si aparecen 2+ dominios distintos en un Expected Result,
+# se considera que el escenario es compuesto y debe separarse.
+_DOMINIOS_ATOMICIDAD = [
+    (r"\bvisualiz|\bmuestra|\bdespliega|\bpantalla|\brenderiz", "visualizacion"),
+    (r"\bformat[oa]|\bmoneda|\bfecha|\bnúmero|\bformat", "formato"),
+    (r"\bbotón|\bbot[oó]n|\bnavega|\bredirige|\bvuelve|\bregresa", "navegacion"),
+    (r"\bsesión|\bexpira|\bcierra sesión|\binactividad", "sesion"),
+    (r"\benlace|\bhipervínculo|\bhref|\blink", "enlace"),
+    (r"\berror de conexión|\btimeout|\bservicio no disponible|\bfalla", "error_servicio"),
+    (r"\bseguridad|\bpermiso|\brol|\bacceso|\bautori", "seguridad"),
+    (r"\bregistr|\baudit|\bbitácora|\blog\b", "auditoria"),
+    (r"\bmensaje de error|\bvalidación de campo|\bcampo oblig", "validacion_campo"),
+    (r"\bcálculo|\bamortiz|\binterés|\bsaldo|\bcuota|\bgrad", "calculo"),
+]
+
+
+def _contar_dominios_er(expected_result: str) -> int:
+    """Cuenta cuántos dominios semánticos distintos aparecen en el Expected Result."""
+    er = expected_result.lower()
+    encontrados = set()
+    for patron, dominio in _DOMINIOS_ATOMICIDAD:
+        if re.search(patron, er, re.IGNORECASE):
+            encontrados.add(dominio)
+    return len(encontrados)
+
+
+def _expected_result_es_compuesto(expected_result: str) -> bool:
+    """
+    Retorna True si el Expected Result describe varias condiciones independientes.
+    Criterios (ambos deben cumplirse):
+      1. Contiene 3+ oraciones/items distintos.
+      2. Aparecen 2+ dominios semánticos diferentes.
+    """
+    er = str(expected_result or "").strip()
+    if not er:
+        return False
+    items = [s.strip() for s in re.split(r"[.\n]|(?<=\w);", er) if len(s.strip()) > 15]
+    if len(items) < 3:
+        return False
+    return _contar_dominios_er(er) >= 2
+
+
+def _separar_condiciones_er(er: str) -> list:
+    """Divide el Expected Result en condiciones individuales (descarta fragmentos < 20 chars)."""
+    texto = er.replace("\\n", "\n")
+    partes = re.split(r"\n\s*[-•*]\s*|\.\s+(?=[A-ZÁÉÍÓÚÑ\(])|;\s+", texto, flags=re.UNICODE)
+    condiciones = []
+    for p in partes:
+        p = p.strip().rstrip(".")
+        if len(p) >= 20:
+            condiciones.append(p)
+    return condiciones
+
+
+def _agrupar_condiciones_por_dominio(condiciones: list) -> list:
+    """
+    Agrupa condiciones por dominio semántico.
+    Retorna lista de dicts: [{"dominio": str, "er": str}, ...]
+    """
+    grupos = {}
+    sin_dominio = []
+
+    for cond in condiciones:
+        dominio_asignado = None
+        for patron, dominio in _DOMINIOS_ATOMICIDAD:
+            if re.search(patron, cond, re.IGNORECASE):
+                dominio_asignado = dominio
+                break
+        if dominio_asignado:
+            grupos.setdefault(dominio_asignado, []).append(cond)
+        else:
+            sin_dominio.append(cond)
+
+    # Condiciones sin dominio claro van al grupo con más items
+    if sin_dominio:
+        if grupos:
+            grupo_mayor = max(grupos, key=lambda k: len(grupos[k]))
+            grupos[grupo_mayor].extend(sin_dominio)
+        else:
+            grupos["general"] = sin_dominio
+
+    resultado = []
+    for dominio, items in grupos.items():
+        er_consolidado = ". ".join(items).strip()
+        if not er_consolidado.endswith("."):
+            er_consolidado += "."
+        resultado.append({"dominio": dominio, "er": er_consolidado})
+
+    return resultado
+
+
+def detectar_y_separar_escenarios_compuestos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Recorre el DataFrame de escenarios y separa los que tienen un Expected Result
+    compuesto (múltiples validaciones de dominios distintos) en escenarios atómicos.
+
+    Reglas:
+    - Solo actúa cuando el ER tiene 3+ afirmaciones de 2+ dominios semánticos distintos.
+    - Cada escenario derivado hereda Title (con sufijo ordinal), Preconditions,
+      Steps, Type y Priority del original.
+    - Si no puede separarse limpiamente, el escenario original se deja intacto.
+    - Escenarios ya atómicos no se tocan.
+    """
+    if df is None or df.empty:
+        return df
+
+    filas_resultado = []
+
+    for _, fila in df.iterrows():
+        er = str(fila.get("Expected Result", "")).strip()
+
+        if not _expected_result_es_compuesto(er):
+            filas_resultado.append(fila.to_dict())
+            continue
+
+        condiciones = _separar_condiciones_er(er)
+        if len(condiciones) < 2:
+            filas_resultado.append(fila.to_dict())
+            continue
+
+        grupos = _agrupar_condiciones_por_dominio(condiciones)
+        if len(grupos) < 2:
+            filas_resultado.append(fila.to_dict())
+            continue
+
+        titulo_base = str(fila.get("Title", "")).strip()
+        for idx_g, grupo in enumerate(grupos, start=1):
+            nueva_fila = fila.to_dict()
+            nueva_fila["Expected Result"] = grupo["er"]
+            nueva_fila["Title"] = f"{titulo_base} — parte {idx_g}"
+            filas_resultado.append(nueva_fila)
+
+    df_out = pd.DataFrame(filas_resultado)
+
+    # Preservar columnas en el mismo orden que el original
+    for col in df.columns:
+        if col not in df_out.columns:
+            df_out[col] = ""
+    df_out = df_out[list(df.columns)]
+
+    return df_out.reset_index(drop=True)

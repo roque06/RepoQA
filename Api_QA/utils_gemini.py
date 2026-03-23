@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 import requests
 import certifi
 import re
@@ -77,6 +77,18 @@ REGLAS DE SALIDA OBLIGATORIAS:
 - NO uses identificadores ficticios o placeholders tecnicos como "ID_CLIENTE_001", "CTA_USD_001", "USR_ADMIN", "A2000" o similares.
 - Describe usuarios, clientes, cuentas y tarjetas en lenguaje natural, sin aliases internos inventados.
 
+REGLA DE ATOMICIDAD — MUY IMPORTANTE:
+- Cada escenario debe tener UN SOLO objetivo verificable principal.
+- Prohibido combinar en un mismo escenario validaciones de naturaleza distinta.
+- Ejemplos de combinaciones PROHIBIDAS en un solo escenario:
+  * Visualizacion de datos + formato de moneda + botones de navegacion
+  * Validacion de campo + mensaje de error + comportamiento de sesion
+  * Carga de contenido + accesibilidad + seguridad de enlace
+  * Flujo exitoso + manejo de error + timeout
+- Si un criterio de aceptacion describe varias condiciones independientes, genera un escenario por cada condicion.
+- La prueba de que un escenario es atomico: su Expected Result describe UN estado o comportamiento concreto y medible, no una lista de verificaciones distintas.
+- Excepcion permitida: pasos de configuracion o contexto que son prerequisito directo del objetivo principal (van en Preconditions, no en Steps ni Expected Result).
+
 OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Flujo feliz end-to-end.
 - Validaciones de campos y formatos.
@@ -86,11 +98,13 @@ OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Seguridad y permisos por rol.
 - Usabilidad/mensajeria de error/persistencia.
 Si alguna categoria no aplica al contexto, no fuerces casos artificiales.
+Cuando una categoria aplica, crea UN escenario por cada comportamiento o regla distinta dentro de esa categoria.
 
 CRITERIO PROFESIONAL DE CALIDAD:
 - Evita casos duplicados o vagos.
 - Cada caso debe tener un objetivo unico y verificable.
 - Expected Result debe ser medible y especifico (estado, calculo, mensaje o efecto en datos).
+- El Expected Result describe una sola condicion de exito, no una lista de condiciones mezcladas.
 - Incluye variantes de datos y combinaciones de parametros (montos, tasas, plazos, gradientes, periodicidad, perfiles, estados).
 - Incluye escenarios negativos realistas (datos invalidos, reglas incumplidas, timeout, dependencias caidas).
 - Incluye casos de trazabilidad/auditoria cuando aplique.
