@@ -177,9 +177,54 @@ class SecureShell:
     border: 1px solid #e5e7eb;
 }}
 
+/* ── Cabecera login ────────────────────────────────── */
+.login-header {{
+    text-align: center;
+    margin-bottom: 2rem;
+}}
+.login-header svg {{
+    display: block;
+    margin: 0 auto 12px auto;
+}}
+.login-title {{
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -.3px;
+    margin: 0;
+}}
+.login-subtitle {{
+    font-size: 13.5px;
+    color: #6b7280;
+    margin-top: 6px;
+}}
+
+/* ── Formulario login ──────────────────────────────── */
+div[data-testid="stForm"] {{
+    border: 1px solid #d1d5db !important;
+    border-radius: 10px !important;
+    padding: 1rem 1rem 1.25rem 1rem !important;
+    background: #ffffff !important;
+}}
+div[data-testid="stForm"] form {{
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}}
+div[data-testid="stFormSubmitButton"] {{
+    width: 88% !important;
+    margin: .5rem auto 0 auto !important;
+}}
+div[data-testid="stFormSubmitButton"] > div {{
+    width: 100% !important;
+}}
+
 /* ── Inputs ────────────────────────────────────────── */
+[data-testid="stTextInput"] {{
+    margin-bottom: .45rem !important;
+}}
 [data-testid="stTextInput"] input {{
-    background:    #ffffff !important;
+    background:    #f1f5f9 !important;
     border:        1.5px solid #e5e7eb !important;
     border-radius: 8px !important;
     font-size:     14px !important;
@@ -200,9 +245,13 @@ class SecureShell:
 }}
 [data-testid="InputInstructions"] {{ display: none !important; }}
 
-/* ── Botón Ingresar — via clase ancla, sin data-testid ─ */
-.login-btn-anchor ~ div button {{
+/* ── Botón Ingresar ────────────────────────────────── */
+div[data-testid="stFormSubmitButton"] button {{
     width:          100% !important;
+    max-width:      100% !important;
+    display:        flex !important;
+    align-items:    center !important;
+    justify-content: center !important;
     background:     #ef4444 !important;
     color:          #ffffff !important;
     border:         none !important;
@@ -213,10 +262,12 @@ class SecureShell:
     letter-spacing: .2px !important;
     box-shadow:     0 4px 14px rgba(239,68,68,.35) !important;
     margin-top:     8px !important;
+    margin-left:    auto !important;
+    margin-right:   auto !important;
     transition:     all .2s !important;
     cursor:         pointer !important;
 }}
-.login-btn-anchor ~ div button:hover {{
+div[data-testid="stFormSubmitButton"] button:hover {{
     background:  #dc2626 !important;
     box-shadow:  0 6px 20px rgba(239,68,68,.45) !important;
     transform:   translateY(-1px) !important;
@@ -288,20 +339,19 @@ class SecureShell:
     def _render_login_ui(self) -> None:
         st.markdown(
             """
-            <div style="text-align:center;margin-bottom:28px">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="#f59e0b"
-                   xmlns="http://www.w3.org/2000/svg" style="margin-bottom:10px">
-                <path d="M12 2a5 5 0 00-5 5v3H6a2 2 0 00-2 2v8a2 2 0 002 2h12
-                         a2 2 0 002-2v-8a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3
-                         8V7a3 3 0 016 0v3H9z"/>
+            <div class="login-header">
+              <svg width="54" height="54" viewBox="0 0 64 64"
+                   xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <rect x="15" y="27" width="34" height="25" rx="2.5"
+                      fill="#fbbf24" stroke="#111827" stroke-width="3"/>
+                <path d="M23 27V20c0-5 4-9 9-9s9 4 9 9v7"
+                      fill="none" stroke="#111827" stroke-width="3.5"
+                      stroke-linecap="round"/>
+                <path d="M32 35c-2 0-3.5 1.6-3.5 3.5 0 1.4.8 2.6 2 3.2V45a1.5 1.5 0 003 0v-3.3c1.2-.6 2-1.8 2-3.2C35.5 36.6 34 35 32 35z"
+                      fill="#111827"/>
               </svg>
-              <div style="font-size:22px;font-weight:800;color:#0f172a;
-                          letter-spacing:-.3px;margin-top:4px">
-                Acceso al sistema
-              </div>
-              <div style="font-size:13.5px;color:#6b7280;margin-top:6px">
-                Ingresa tus credenciales para continuar
-              </div>
+              <div class="login-title">Acceso al sistema</div>
+              <div class="login-subtitle">Ingresa tus credenciales para continuar</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -311,9 +361,7 @@ class SecureShell:
             u = st.text_input("Usuario",    key="u")
             p = st.text_input("Contraseña", type="password", key="p")
             st.markdown('<div style="height:4px"></div>', unsafe_allow_html=True)
-            # Ancla para apuntar el CSS al botón submit sin usar data-testid
-            st.markdown('<span class="login-btn-anchor"></span>', unsafe_allow_html=True)
-            submitted = st.form_submit_button("Ingresar")
+            submitted = st.form_submit_button("Ingresar", use_container_width=True)
 
         if submitted:
             ok = False
