@@ -35,6 +35,40 @@ def _limpiar_texto_ejemplo(texto: str) -> str:
     return limpio.strip()
 
 
+def _limpiar_identificadores_placeholder(texto: str) -> str:
+    """
+    Quita aliases/identificadores ficticios generados por el modelo, por ejemplo:
+    - Usuario 'A2000'
+    - Cliente 'ID_CLIENTE_001'
+    - cuenta 'CTA_USD_001'
+    Mantiene la frase en lenguaje natural sin exponer códigos inventados.
+    """
+    if not isinstance(texto, str):
+        return ""
+
+    patron_placeholder = r"(?:ID_[A-Z0-9_]+|CTA_[A-Z0-9_]+|USR_[A-Z0-9_]+|USER_[A-Z0-9_]+|CLIENTE_[A-Z0-9_]+|CUENTA_[A-Z0-9_]+|[A-Z]{1,3}\d{3,})"
+    limpio = texto
+
+    reemplazos_contextuales = [
+        (rf"\bUsuario\s+[\"']{patron_placeholder}[\"']", "Usuario"),
+        (rf"\bCliente\s+[\"']{patron_placeholder}[\"']", "Cliente"),
+        (rf"\bcuenta\s+[\"']{patron_placeholder}[\"']", "cuenta"),
+        (rf"\bCuenta\s+[\"']{patron_placeholder}[\"']", "Cuenta"),
+        (rf"\btarjeta\s+[\"']{patron_placeholder}[\"']", "tarjeta"),
+        (rf"\bTarjeta\s+[\"']{patron_placeholder}[\"']", "Tarjeta"),
+    ]
+    for patron, reemplazo in reemplazos_contextuales:
+        limpio = re.sub(patron, reemplazo, limpio)
+
+    limpio = re.sub(rf"\s*[\"']{patron_placeholder}[\"']", "", limpio)
+    limpio = re.sub(r"\basociad([ao]) a\s+activa\b", r"asociad\1 a la cuenta activa", limpio, flags=re.IGNORECASE)
+    limpio = re.sub(r"\b(es|sea|son)\s*(?=[,.;:]|$)", "", limpio, flags=re.IGNORECASE)
+    limpio = re.sub(r"\bConfirmar que (el|la|los|las)\b", r"Confirmar \1", limpio, flags=re.IGNORECASE)
+    limpio = re.sub(r"\s{2,}", " ", limpio)
+    limpio = re.sub(r"\s+([,.;:])", r"\1", limpio)
+    return limpio.strip()
+
+
 def limpiar_csv_con_formato(texto_csv: str, columnas_esperadas: int = 6) -> str:
     import csv, io
 
@@ -117,6 +151,7 @@ def normalizar_preconditions(preconds: str) -> str:
             trozo = re.sub(r"^\s*(?:-|\*|•)?\s*", "", trozo)
             trozo = re.sub(r"^\s*\d+\.\s*", "", trozo)
             trozo = _limpiar_texto_ejemplo(trozo)
+            trozo = _limpiar_identificadores_placeholder(trozo)
             if trozo:
                 candidatos.append(trozo)
 
@@ -156,6 +191,7 @@ def normalizar_steps(steps: str) -> str:
             t = re.sub(r"^\s*(?:-|\*|•)?\s*", "", t)
             t = re.sub(r"^\s*\d+\.\s*", "", t)
             t = _limpiar_texto_ejemplo(t)
+            t = _limpiar_identificadores_placeholder(t)
             if t:
                 partes.append(t)
 
