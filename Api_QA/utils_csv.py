@@ -7,6 +7,34 @@ import re
 from io import StringIO
 
 
+def _limpiar_texto_ejemplo(texto: str) -> str:
+    """
+    Elimina expresiones de ejemplo del tipo:
+    - (Ej: 5,000 DOP)
+    - (ej. Español)
+    - (por ejemplo: Admin)
+    sin tocar otros paréntesis válidos como siglas o aclaraciones funcionales.
+    """
+    if not isinstance(texto, str):
+        return ""
+
+    limpio = texto
+    limpio = re.sub(
+        r"\s*\(\s*(?:ej(?:emplo)?\.?\s*:?\s*|por ejemplo\s*:?\s*|p\.\s*ej\.?\s*:?\s*)[^)]*\)",
+        "",
+        limpio,
+        flags=re.IGNORECASE,
+    )
+    limpio = re.sub(
+        r"\s*[-,:]?\s*(?:ej(?:emplo)?\.?\s*:?\s*|por ejemplo\s*:?\s*|p\.\s*ej\.?\s*:?\s*)[^;\n]*",
+        "",
+        limpio,
+        flags=re.IGNORECASE,
+    )
+    limpio = re.sub(r"\s{2,}", " ", limpio)
+    return limpio.strip()
+
+
 def limpiar_csv_con_formato(texto_csv: str, columnas_esperadas: int = 6) -> str:
     import csv, io
 
@@ -88,6 +116,7 @@ def normalizar_preconditions(preconds: str) -> str:
             # Quitar viñetas/numeraciones previas al inicio de cada item
             trozo = re.sub(r"^\s*(?:-|\*|•)?\s*", "", trozo)
             trozo = re.sub(r"^\s*\d+\.\s*", "", trozo)
+            trozo = _limpiar_texto_ejemplo(trozo)
             if trozo:
                 candidatos.append(trozo)
 
@@ -126,6 +155,7 @@ def normalizar_steps(steps: str) -> str:
             # Quitar numeración/bullets previas
             t = re.sub(r"^\s*(?:-|\*|•)?\s*", "", t)
             t = re.sub(r"^\s*\d+\.\s*", "", t)
+            t = _limpiar_texto_ejemplo(t)
             if t:
                 partes.append(t)
 

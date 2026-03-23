@@ -72,6 +72,8 @@ REGLAS DE SALIDA OBLIGATORIAS:
 - En Type y Priority no agregues texto extra, comas ni saltos de linea.
 - En Title NO uses prefijos de enumeracion ni labels tecnicos: prohibido "SCENARIO", "Escenario", "Caso #", "TC-", numeros al inicio o codigos.
 - En Title usa estilo natural QA: frases cortas y especificas como "Validacion de ...", "Regla: ...", "Reestructuracion ...", "Integracion ...".
+- NO incluyas ejemplos dentro del contenido: prohibido usar textos como "Ej:", "ej.", "por ejemplo" o valores ilustrativos entre parentesis.
+- Redacta los pasos, precondiciones y resultados con datos concretos o neutros, sin muletillas de ejemplo.
 
 OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Flujo feliz end-to-end.
@@ -90,6 +92,7 @@ CRITERIO PROFESIONAL DE CALIDAD:
 - Incluye variantes de datos y combinaciones de parametros (montos, tasas, plazos, gradientes, periodicidad, perfiles, estados).
 - Incluye escenarios negativos realistas (datos invalidos, reglas incumplidas, timeout, dependencias caidas).
 - Incluye casos de trazabilidad/auditoria cuando aplique.
+- Si necesitas mencionar un valor, usalo como dato directo del caso, no como ejemplo entre parentesis.
 
 PRECONDITIONS (obligatorio):
 - Enumeradas en lineas separadas dentro de la misma celda (1., 2., 3...).
