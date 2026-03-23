@@ -74,6 +74,8 @@ REGLAS DE SALIDA OBLIGATORIAS:
 - En Title usa estilo natural QA: frases cortas y especificas como "Validacion de ...", "Regla: ...", "Reestructuracion ...", "Integracion ...".
 - NO incluyas ejemplos dentro del contenido: prohibido usar textos como "Ej:", "ej.", "por ejemplo" o valores ilustrativos entre parentesis.
 - Redacta los pasos, precondiciones y resultados con datos concretos o neutros, sin muletillas de ejemplo.
+- NO uses identificadores ficticios o placeholders tecnicos como "ID_CLIENTE_001", "CTA_USD_001", "USR_ADMIN", "A2000" o similares.
+- Describe usuarios, clientes, cuentas y tarjetas en lenguaje natural, sin aliases internos inventados.
 
 OBJETIVO DE COBERTURA (adaptar al contexto real):
 - Flujo feliz end-to-end.
