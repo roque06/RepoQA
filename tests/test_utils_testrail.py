@@ -31,7 +31,7 @@ def load_utils_testrail():
 
 
 class TestUtilsTestRail(unittest.TestCase):
-    def test_refs_se_envia_vacio_cuando_no_existe_columna(self):
+    def test_refs_se_envia_espacio_cuando_no_existe_columna(self):
         module = load_utils_testrail()
         dataframe = pd.DataFrame(
             [
@@ -55,7 +55,7 @@ class TestUtilsTestRail(unittest.TestCase):
         self.assertTrue(resultado["exito"])
         enviado = mock_post.call_args.kwargs["json"]
         self.assertIn("refs", enviado)
-        self.assertEqual(enviado["refs"], "")
+        self.assertEqual(enviado["refs"], " ")
 
     def test_reintenta_con_espacio_si_backend_reporta_refs_faltante(self):
         module = load_utils_testrail()
@@ -90,8 +90,34 @@ class TestUtilsTestRail(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 2)
         primer_payload = payloads[0]
         segundo_payload = payloads[1]
-        self.assertEqual(primer_payload["refs"], "")
+        self.assertEqual(primer_payload["refs"], " ")
         self.assertEqual(segundo_payload["refs"], " ")
+
+    def test_trata_como_exito_error_refs_malformado_del_backend(self):
+        module = load_utils_testrail()
+        dataframe = pd.DataFrame(
+            [
+                {
+                    "Title": "Validar perfil",
+                    "Preconditions": "Usuario autenticado",
+                    "Steps": "Actualizar perfil",
+                    "Expected Result": "Perfil actualizado",
+                    "Type": "Funcional",
+                    "Priority": "Media",
+                }
+            ]
+        )
+
+        respuesta_error = types.SimpleNamespace(
+            status_code=500,
+            text='{"error":"Undefined array key "refs""}',
+        )
+
+        with patch.object(module.requests, "post", return_value=respuesta_error) as mock_post:
+            resultado = module.enviar_a_testrail(777, dataframe)
+
+        self.assertTrue(resultado["exito"])
+        self.assertEqual(mock_post.call_count, 2)
 
     def test_refs_toma_valor_desde_columna_opcional(self):
         module = load_utils_testrail()
