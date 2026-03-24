@@ -7,6 +7,14 @@ import re
 from io import StringIO
 
 
+def _normalizar_espacios(texto: str) -> str:
+    if not isinstance(texto, str):
+        return ""
+    texto = re.sub(r"\s{2,}", " ", texto)
+    texto = re.sub(r"\s+([,.;:])", r"\1", texto)
+    return texto.strip()
+
+
 def _limpiar_texto_ejemplo(texto: str) -> str:
     """
     Elimina expresiones de ejemplo del tipo:
@@ -33,6 +41,18 @@ def _limpiar_texto_ejemplo(texto: str) -> str:
     )
     limpio = re.sub(r"\s{2,}", " ", limpio)
     return limpio.strip()
+
+
+def _limpiar_contenido_parentesis(texto: str) -> str:
+    """
+    Elimina cualquier contenido entre paréntesis para evitar exposición de
+    códigos internos, IDs o referencias técnicas, preservando la frase base.
+    """
+    if not isinstance(texto, str):
+        return ""
+
+    limpio = re.sub(r"\s*\([^)]*\)", "", texto)
+    return _normalizar_espacios(limpio)
 
 
 def _limpiar_identificadores_placeholder(texto: str) -> str:
@@ -64,9 +84,33 @@ def _limpiar_identificadores_placeholder(texto: str) -> str:
     limpio = re.sub(r"\basociad([ao]) a\s+activa\b", r"asociad\1 a la cuenta activa", limpio, flags=re.IGNORECASE)
     limpio = re.sub(r"\b(es|sea|son)\s*(?=[,.;:]|$)", "", limpio, flags=re.IGNORECASE)
     limpio = re.sub(r"\bConfirmar que (el|la|los|las)\b", r"Confirmar \1", limpio, flags=re.IGNORECASE)
-    limpio = re.sub(r"\s{2,}", " ", limpio)
-    limpio = re.sub(r"\s+([,.;:])", r"\1", limpio)
-    return limpio.strip()
+    return _normalizar_espacios(limpio)
+
+
+def limpiar_texto_qa(texto: str) -> str:
+    """
+    Aplica reglas de limpieza funcional para no exponer ejemplos, códigos
+    internos ni contenido entre paréntesis.
+    """
+    if not isinstance(texto, str):
+        return ""
+
+    limpio = texto.strip()
+    if not limpio:
+        return ""
+
+    # Reemplazos funcionales antes de eliminar el contenido técnico.
+    limpio = re.sub(
+        r"\bPlantilla contable\s*\([^)]*\)",
+        "Plantilla contable configurada",
+        limpio,
+        flags=re.IGNORECASE,
+    )
+
+    limpio = _limpiar_texto_ejemplo(limpio)
+    limpio = _limpiar_contenido_parentesis(limpio)
+    limpio = _limpiar_identificadores_placeholder(limpio)
+    return _normalizar_espacios(limpio)
 
 
 def limpiar_csv_con_formato(texto_csv: str, columnas_esperadas: int = 6) -> str:
@@ -150,8 +194,7 @@ def normalizar_preconditions(preconds: str) -> str:
             # Quitar viñetas/numeraciones previas al inicio de cada item
             trozo = re.sub(r"^\s*(?:-|\*|•)?\s*", "", trozo)
             trozo = re.sub(r"^\s*\d+\.\s*", "", trozo)
-            trozo = _limpiar_texto_ejemplo(trozo)
-            trozo = _limpiar_identificadores_placeholder(trozo)
+            trozo = limpiar_texto_qa(trozo)
             if trozo:
                 candidatos.append(trozo)
 
@@ -190,8 +233,7 @@ def normalizar_steps(steps: str) -> str:
             # Quitar numeración/bullets previas
             t = re.sub(r"^\s*(?:-|\*|•)?\s*", "", t)
             t = re.sub(r"^\s*\d+\.\s*", "", t)
-            t = _limpiar_texto_ejemplo(t)
-            t = _limpiar_identificadores_placeholder(t)
+            t = limpiar_texto_qa(t)
             if t:
                 partes.append(t)
 
