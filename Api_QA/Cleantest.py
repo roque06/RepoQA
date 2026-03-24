@@ -1008,6 +1008,8 @@ button[kind="secondary"]:hover{
                                 df_it["Steps"] = df_it["Steps"].apply(normalizar_steps).str.replace(r'\\n','\n',regex=True)
                             if "Preconditions" in df_it.columns:
                                 df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
+                            if "Expected Result" in df_it.columns:
+                                df_it["Expected Result"] = df_it["Expected Result"].apply(limpiar_texto_qa)
                             df_it["Estado"] = "Pendiente"
                             df_it = enforce_expected_results_quality(df_it, analysis=analisis_documento)
                             df = df_it.copy()
