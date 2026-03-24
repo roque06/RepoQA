@@ -1007,6 +1007,8 @@ button[kind="secondary"]:hover{
                                 df_it["Steps"] = df_it["Steps"].apply(normalizar_steps).str.replace(r'\\n','\n',regex=True)
                             if "Preconditions" in df_it.columns:
                                 df_it["Preconditions"] = df_it["Preconditions"].apply(normalizar_preconditions)
+                            if "Expected Result" in df_it.columns:
+                                df_it["Expected Result"] = df_it["Expected Result"].apply(limpiar_texto_qa)
                             df_it["Estado"] = "Pendiente"
                             df = df_it.copy()
                             st.session_state["ultima_validacion_qa"] = metadata_validacion
