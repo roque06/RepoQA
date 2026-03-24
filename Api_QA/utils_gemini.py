@@ -37,7 +37,7 @@ def _json_schema_hint() -> str:
     return """
 Devuelve SOLO JSON válido con esta estructura exacta:
 {
-  "document_type": "API | UI/Formulario | Proceso de negocio | Documento financiero/contable | Mixto",
+  "document_type": "UI/Formulario | API | Workflow/Proceso | Integración | Reporte/Consulta | Financiero/Contable | Mixto",
   "functional_summary": {
     "module_or_process": "",
     "actors": [""],
@@ -47,7 +47,8 @@ Devuelve SOLO JSON válido con esta estructura exacta:
     "calculations": [""],
     "risks": [""],
     "assumptions": [""],
-    "coverage_focus": [""]
+    "coverage_focus": [""],
+    "functional_blocks": [""]
   },
   "test_scenarios": [
     {
@@ -76,19 +77,23 @@ def prompt_generar_escenarios_profesionales(
     descripcion_refinada = limitar_texto_para_gemini(descripcion_refinada, max_chars=9000)
     contexto_original = limitar_texto_para_gemini(contexto_original or "", max_chars=12000)
     analisis_documento = analisis_documento or {}
-    document_type = analisis_documento.get("document_type", "Proceso de negocio")
+    document_type = analisis_documento.get("document_type", "Workflow/Proceso")
     analysis_summary = summarize_analysis_for_prompt(analisis_documento) if analisis_documento else "- No se recibió análisis estructurado."
+    functional_blocks = analisis_documento.get("functional_blocks", []) if analisis_documento else []
+    volume = analisis_documento.get("scenario_volume", {}) if analisis_documento else {}
 
     coverage_rules = {
         "API": "Incluye autenticación/autorización, códigos HTTP, validación de schema, contratos, idempotencia, manejo de errores y resiliencia.",
         "UI/Formulario": "Incluye flujo visible, validaciones de campos, mensajes, persistencia, reglas por rol, navegación y usabilidad.",
-        "Proceso de negocio": "Incluye flujo end-to-end, reglas de negocio, estados, aprobaciones, errores controlados y trazabilidad.",
-        "Documento financiero/contable": "Incluye cálculos, redondeos, reversos, impacto contable, consistencia de saldos, controles y reportes.",
-        "Mixto": "Combina cobertura funcional, integración, reglas de negocio, validaciones visibles y resiliencia entre componentes.",
+        "Workflow/Proceso": "Incluye estados, transiciones, aprobaciones, rechazos, permisos, restricciones y cambios visibles de estado.",
+        "Integración": "Incluye timeout, servicio no disponible, datos incompletos, errores controlados y reintentos cuando aplique.",
+        "Reporte/Consulta": "Incluye generación, filtros, consistencia de datos, visualización y exportación cuando corresponda.",
+        "Financiero/Contable": "Incluye cálculos, redondeos, comisiones, reversos, consistencia y trazabilidad solo cuando el documento lo requiera.",
+        "Mixto": "Combina cobertura funcional, workflow, integración, reportes, validaciones visibles y resiliencia entre componentes según la evidencia del documento.",
     }
 
-    target_label = target_cases if isinstance(target_cases, int) else 20
-    min_label = min_cases if isinstance(min_cases, int) else 8
+    target_label = target_cases if isinstance(target_cases, int) else int(volume.get("target", 20) or 20)
+    min_label = min_cases if isinstance(min_cases, int) else int(volume.get("minimum", 8) or 8)
 
     prompt_text = f"""
 {SYSTEM_PROMPT_ES}
@@ -98,13 +103,15 @@ Está PROHIBIDO generar escenarios cuyo objetivo principal sea configuración t�
 Cuando el documento contenga detalles técnicos, tradúcelos a comportamiento del sistema, impacto para el usuario, controles del negocio, integraciones observables y reglas verificables.
 
 Tipo de documento detectado: {document_type}
-Cobertura adaptativa obligatoria: {coverage_rules.get(document_type, coverage_rules['Proceso de negocio'])}
+Cobertura adaptativa obligatoria: {coverage_rules.get(document_type, coverage_rules['Workflow/Proceso'])}
+Bloques funcionales detectados: {", ".join(functional_blocks) if functional_blocks else "No explícitos"}
 
 Análisis estructurado previo del documento:
 {analysis_summary}
 
 Requisitos obligatorios de calidad:
 - Genera entre {min_label} y {target_label} escenarios solo si están justificados por el contexto.
+- Si el documento contiene múltiples bloques funcionales, cubre cada bloque relevante con escenarios suficientes; no resumas todo en unos pocos casos.
 - Cada escenario debe ser atómico: un objetivo verificable principal.
 - El resultado esperado debe ser medible, visible o auditable.
 - Diferencia explícitamente escenarios basados en evidencia directa (source_basis=explicito) frente a inferencias razonables de QA (source_basis=inferido).
@@ -121,6 +128,7 @@ Criterios específicos de cobertura inteligente:
 - Si hay integraciones: fallas del servicio, reintentos, degradación controlada, consistencia y trazabilidad.
 - Si hay reportes o consultas: filtros, consistencia, orden, paginación y exactitud de datos.
 - No fuerces categorías irrelevantes para el documento.
+- No priorices contabilidad, cálculos, reversos o trazabilidad financiera salvo que el documento lo indique explícitamente.
 
 Restricciones de redacción:
 - title debe ser claro, específico y sin prefijos como Escenario, Caso, TC o numeraciones.
@@ -129,6 +137,7 @@ Restricciones de redacción:
 - type solo puede ser Funcional, Validacion, Integracion, Seguridad o Usabilidad.
 - priority solo puede ser Alta, Media o Baja.
 - El JSON debe ser parseable con json.loads sin limpieza adicional.
+- El expected_result debe describir el comportamiento observable del sistema, incluyendo validación, cambio de estado, persistencia, respuesta, mensaje o visualización cuando aplique.
 
 {_json_schema_hint()}
 
