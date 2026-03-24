@@ -1,3 +1,4 @@
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -15,6 +16,7 @@ from Api_QA.qa_engine import (
     parse_gemini_json_response,
     prepare_extended_export,
     prepare_testrail_export,
+    scenarios_dataframe_to_csv,
     validate_and_prepare_scenarios,
 )
 from Api_QA.utils_ingest import preserve_document_structure, segment_document_text
@@ -181,6 +183,31 @@ class TestQaEngine(unittest.TestCase):
         }
         df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
         self.assertEqual(df.iloc[0]["Expected Result"], long_expected)
+
+    def test_csv_export_roundtrip_preserves_long_expected_result(self):
+        long_expected = (
+            "El sistema procesa la solicitud completa, refleja el cambio de estado visible, "
+            "muestra un mensaje detallado al usuario final y persiste todos los datos requeridos "
+            "para consultas posteriores sin recortar el contenido funcional esperado."
+        )
+        df = pd.DataFrame(
+            [
+                {
+                    "Title": "Flujo completo",
+                    "Preconditions": "1. Usuario autenticado",
+                    "Steps": "1. Ejecutar acción\\n2. Confirmar operación",
+                    "Expected Result": long_expected,
+                    "Type": "Funcional",
+                    "Priority": "Alta",
+                    "Estado": "Pendiente",
+                    "source_basis": "explicito",
+                    "assumption": "",
+                }
+            ]
+        )
+        csv_text = scenarios_dataframe_to_csv(df, extended=False)
+        parsed = pd.read_csv(io.StringIO(csv_text))
+        self.assertEqual(parsed.iloc[0]["Expected Result"], long_expected)
 
     def test_ingest_helpers_preserve_structure_and_segment(self):
         text = "# Encabezado\nCampo,Valor\nMonto,100\n\n" + ("Detalle operativo. " * 1200)
