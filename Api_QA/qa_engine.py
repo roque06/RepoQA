@@ -382,6 +382,27 @@ def _enhance_expected_result(expected: str, title: str, steps: str, scenario_typ
     return cleaned
 
 
+def _looks_incomplete_expected_result(texto: str) -> bool:
+    clean = _sanitize_expected_result_text(texto).lower()
+    if not clean:
+        return True
+    short_fragments = {
+        "el sistema",
+        "sistema",
+        "correcto",
+        "ok",
+        "exitoso",
+        "operación exitosa",
+        "la operación es exitosa",
+    }
+    if clean in short_fragments:
+        return True
+    # Casos del estilo "El sistema ..." con muy poca información observable.
+    if re.fullmatch(r"el sistema(?:\s+\w+){0,2}", clean):
+        return True
+    return len(clean.split()) < 6
+
+
 def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict]:
     analysis = analysis or {}
     scenarios = payload.get("test_scenarios") or []
@@ -395,6 +416,8 @@ def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = Non
         scenario_type = _normalize_type(str(raw.get("type", "Funcional")), title, analysis)
         priority = _normalize_priority(str(raw.get("priority", "Media")), title, analysis)
         expected = _enhance_expected_result(str(raw.get("expected_result", "")), title, steps, scenario_type, analysis)
+        if _looks_incomplete_expected_result(expected):
+            expected = _expected_result_template(title, steps, scenario_type, analysis.get("document_type", "Workflow/Proceso"))
         source_basis = limpiar_texto_qa(str(raw.get("source_basis", "explicito"))).lower() or "explicito"
         if source_basis not in {"explicito", "inferido"}:
             source_basis = "inferido" if "infer" in source_basis else "explicito"
@@ -446,6 +469,35 @@ def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = Non
             df[column] = ""
     df = df[export_columns].copy()
     return df, {"accepted": len(df), "dropped": dropped}
+
+
+def enforce_expected_results_quality(df: pd.DataFrame, analysis: Optional[Dict] = None) -> pd.DataFrame:
+    """
+    Refuerza Expected Result para evitar salidas incompletas tipo "El sistema".
+    Se puede aplicar sobre DataFrames generados o editados.
+    """
+    analysis = analysis or {}
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    out = df.copy()
+    if "Expected Result" not in out.columns:
+        return out
+
+    for idx, row in out.iterrows():
+        title = str(row.get("Title", ""))
+        steps = str(row.get("Steps", ""))
+        scenario_type = _normalize_type(str(row.get("Type", "Funcional")), title, analysis)
+        expected = _sanitize_expected_result_text(str(row.get("Expected Result", "")))
+        if _looks_incomplete_expected_result(expected):
+            out.at[idx, "Expected Result"] = _expected_result_template(
+                title=title,
+                steps=steps,
+                scenario_type=scenario_type,
+                document_type=analysis.get("document_type", "Workflow/Proceso"),
+            )
+        else:
+            out.at[idx, "Expected Result"] = expected
+    return out
 
 
 def build_testrail_export_dataframe(df: pd.DataFrame) -> pd.DataFrame:

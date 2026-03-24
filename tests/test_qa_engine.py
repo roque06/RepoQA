@@ -17,6 +17,7 @@ from Api_QA.qa_engine import (
     prepare_extended_export,
     prepare_testrail_export,
     scenarios_dataframe_to_csv,
+    enforce_expected_results_quality,
     validate_and_prepare_scenarios,
 )
 from Api_QA.utils_ingest import preserve_document_structure, segment_document_text
@@ -183,6 +184,42 @@ class TestQaEngine(unittest.TestCase):
         }
         df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
         self.assertEqual(df.iloc[0]["Expected Result"], long_expected)
+
+    def test_incomplete_expected_result_is_replaced_with_observable_template(self):
+        analysis = analyze_document_structure("Flujo web de registro y validación de formulario.")
+        payload = {
+            "test_scenarios": [
+                {
+                    "title": "Registro de usuario",
+                    "preconditions": "1. Formulario disponible",
+                    "steps": "1. Completar datos\\n2. Enviar formulario\\n3. Confirmar registro\\n4. Revisar respuesta",
+                    "expected_result": "El sistema",
+                    "type": "Funcional",
+                    "priority": "Alta",
+                }
+            ]
+        }
+        df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
+        self.assertNotEqual(df.iloc[0]["Expected Result"].strip().lower(), "el sistema")
+        self.assertIn("muestra", df.iloc[0]["Expected Result"].lower())
+
+    def test_enforce_expected_results_quality_on_existing_dataframe(self):
+        analysis = analyze_document_structure("API REST de autenticación con respuesta HTTP.")
+        df = pd.DataFrame(
+            [
+                {
+                    "Title": "Autenticación API",
+                    "Preconditions": "1. Token disponible",
+                    "Steps": "1. Enviar request\\n2. Revisar response",
+                    "Expected Result": "El sistema",
+                    "Type": "Integracion",
+                    "Priority": "Alta",
+                    "Estado": "Pendiente",
+                }
+            ]
+        )
+        fixed = enforce_expected_results_quality(df, analysis=analysis)
+        self.assertIn("código http", fixed.iloc[0]["Expected Result"].lower())
 
     def test_csv_export_roundtrip_preserves_long_expected_result(self):
         long_expected = (

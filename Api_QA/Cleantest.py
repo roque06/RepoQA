@@ -85,6 +85,7 @@ from utils_gemini import (
 from qa_engine import (
     analyze_document_structure,
     build_testrail_export_dataframe,
+    enforce_expected_results_quality,
     estimate_scenario_volume,
     parse_gemini_json_response,
     prepare_extended_export,
@@ -1010,6 +1011,7 @@ button[kind="secondary"]:hover{
                             if "Expected Result" in df_it.columns:
                                 df_it["Expected Result"] = df_it["Expected Result"].apply(limpiar_texto_qa)
                             df_it["Estado"] = "Pendiente"
+                            df_it = enforce_expected_results_quality(df_it, analysis=analisis_documento)
                             df = df_it.copy()
                             st.session_state["ultima_validacion_qa"] = metadata_validacion
                             break  # CSV válido y con datos — no reintentar
@@ -1080,6 +1082,7 @@ button[kind="secondary"]:hover{
                 df_work["Steps"] = df_work["Steps"].apply(normalizar_steps)
             if "Preconditions" in df_work.columns:
                 df_work["Preconditions"] = df_work["Preconditions"].apply(normalizar_preconditions)
+            df_work = enforce_expected_results_quality(df_work, analysis=st.session_state.get("analisis_documento", {}))
             df_work.reset_index(drop=True, inplace=True)
             if "✓" not in df_work.columns:
                 df_work.insert(0, "✓", True)
