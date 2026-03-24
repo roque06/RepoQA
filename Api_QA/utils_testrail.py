@@ -88,6 +88,14 @@ def _es_error_refs_faltante(response) -> bool:
     return response.status_code == 500 and 'Undefined array key "refs"' in texto
 
 
+def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
+    if not _es_error_refs_faltante(response):
+        return response
+    datos_retry = dict(datos)
+    datos_retry["refs"] = " "
+    return _post_case(url, datos_retry)
+
+
 def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     url = f"{TESTRAIL_DOMAIN}/index.php?/api/v2/add_case/{section_id}"
     exitosos, errores = 0, []
@@ -97,9 +105,9 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
 
         try:
             r = _post_case(url, datos)
-            # TestRail crea el caso incluso cuando devuelve 500 por refs vacío,
-            # por lo que reintentar causaría duplicados. Lo tratamos como éxito.
-            if r.status_code in (200, 201) or _es_error_refs_faltante(r):
+            if _es_error_refs_faltante(r):
+                r = _reenviar_con_refs_en_blanco(url, datos, r)
+            if r.status_code in (200, 201):
                 exitosos += 1
             else:
                 errores.append(f"Fila {i}: {r.status_code} - {r.text}")
