@@ -1076,6 +1076,7 @@ button[kind="secondary"]:hover{
 
             # ── Preparar df de trabajo ──────────────────────────────
             df_work = df_prev.copy()
+            internal_cols = ["source_basis", "assumption", "quality_notes", "score", "flags"]
             if "Estado" not in df_work.columns:
                 df_work["Estado"] = "Pendiente"
             if "Steps" in df_work.columns:
@@ -1084,12 +1085,14 @@ button[kind="secondary"]:hover{
                 df_work["Preconditions"] = df_work["Preconditions"].apply(normalizar_preconditions)
             df_work = enforce_expected_results_quality(df_work, analysis=st.session_state.get("analisis_documento", {}))
             df_work.reset_index(drop=True, inplace=True)
-            if "✓" not in df_work.columns:
-                df_work.insert(0, "✓", True)
+            internal_shadow = df_work[[c for c in internal_cols if c in df_work.columns]].copy()
+            df_view = df_work.drop(columns=internal_cols, errors="ignore")
+            if "✓" not in df_view.columns:
+                df_view.insert(0, "✓", True)
 
             # ── TABLA ÚNICA: selección + edición inline ─────────────
             edited_unified = st.data_editor(
-                df_work,
+                df_view,
                 num_rows="dynamic",
                 use_container_width=True,
                 hide_index=True,
@@ -1106,7 +1109,11 @@ button[kind="secondary"]:hover{
             df_sin_check = edited_unified.drop(columns=["✓"], errors="ignore")
             st.session_state.df_editable = df_sin_check
             df_export_tr = build_testrail_export_dataframe(df_sin_check)
-            df_export_ext = prepare_extended_export(df_sin_check)
+            df_for_extended = df_sin_check.copy()
+            for col in internal_cols:
+                if col in internal_shadow.columns:
+                    df_for_extended[col] = internal_shadow[col].reindex(df_for_extended.index).fillna("")
+            df_export_ext = prepare_extended_export(df_for_extended)
 
             # Estadística de selección
             sel_mask = edited_unified["✓"] == True
