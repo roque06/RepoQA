@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from Api_QA.qa_engine import (
     TESTRAIL_EXPORT_COLUMNS,
     analyze_document_structure,
+    build_testrail_export_dataframe,
     classify_document_type,
     estimate_scenario_volume,
     parse_gemini_json_response,
@@ -124,11 +125,20 @@ class TestQaEngine(unittest.TestCase):
                 }
             ]
         )
-        export_df = prepare_testrail_export(df)
+        export_df = build_testrail_export_dataframe(df)
         self.assertEqual(list(export_df.columns), TESTRAIL_EXPORT_COLUMNS)
         self.assertNotIn("✓", export_df.columns)
         self.assertNotIn("source_basis", export_df.columns)
         self.assertNotIn("assumption", export_df.columns)
+        self.assertNotIn("quality_notes", export_df.columns)
+
+    def test_build_testrail_export_dataframe_enforces_exact_7_columns_contract(self):
+        df = pd.DataFrame([{"Title": "Caso", "Expected Result": "Texto", "Estado": "Pendiente", "extra": "x"}])
+        export_df = build_testrail_export_dataframe(df)
+        self.assertEqual(export_df.shape[1], 7)
+        self.assertEqual(list(export_df.columns), TESTRAIL_EXPORT_COLUMNS)
+        self.assertEqual(export_df.iloc[0]["Preconditions"], "")
+        self.assertEqual(export_df.iloc[0]["Steps"], "")
 
     def test_prepare_extended_export_keeps_traceability_outside_default_mode(self):
         df = pd.DataFrame(
@@ -148,6 +158,29 @@ class TestQaEngine(unittest.TestCase):
         self.assertIn("source_basis", export_df.columns)
         self.assertIn("assumption", export_df.columns)
         self.assertEqual(export_df.iloc[0]["source_basis"], "inferido")
+
+    def test_validate_pipeline_does_not_truncate_expected_result(self):
+        analysis = analyze_document_structure("Workflow de aprobación de solicitudes.")
+        long_expected = (
+            "El sistema actualiza el estado de la solicitud a Aprobada, refleja el cambio en la bandeja del aprobador, "
+            "muestra un mensaje de confirmación visible y persiste la transición para consulta posterior."
+        )
+        payload = {
+            "test_scenarios": [
+                {
+                    "title": "Aprobación de solicitud",
+                    "preconditions": "1. Solicitud en estado pendiente\\n2. Aprobador con permisos",
+                    "steps": "1. Abrir solicitud\\n2. Revisar datos\\n3. Aprobar\\n4. Confirmar operación",
+                    "expected_result": long_expected,
+                    "type": "Funcional",
+                    "priority": "Alta",
+                    "source_basis": "explicito",
+                    "assumption": "",
+                }
+            ]
+        }
+        df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
+        self.assertEqual(df.iloc[0]["Expected Result"], long_expected)
 
     def test_ingest_helpers_preserve_structure_and_segment(self):
         text = "# Encabezado\nCampo,Valor\nMonto,100\n\n" + ("Detalle operativo. " * 1200)
