@@ -77,9 +77,13 @@ def _construir_payload_caso(fila) -> dict:
     tipo = _s(fila.get("Type", "Funcional"))
     prio = _s(fila.get("Priority", "Media"))
 
+    refs = _refs_desde_fila(fila)
+    if not refs:
+        refs = " "
+
     return {
         "title": title,
-        "refs": _refs_desde_fila(fila),
+        "refs": refs,
         "custom_preconds": pre,
         "custom_steps": steps,
         "custom_expected": expected,
@@ -92,8 +96,23 @@ def _post_case(url: str, datos: dict):
     return requests.post(url, headers=HEADERS, auth=AUTH, json=datos, timeout=30)
 
 def _es_error_refs_faltante(response) -> bool:
-    texto = _s(response.text).replace('\\"', '"')
-    return response.status_code == 500 and 'Undefined array key "refs"' in texto
+    texto = _s(getattr(response, "text", ""))
+    texto = texto.replace('\\"', '"').replace("\\\\\"", "\"")
+    if getattr(response, "status_code", None) != 500:
+        return False
+    return (
+        'Undefined array key "refs"' in texto
+        or "Undefined array key 'refs'" in texto
+        or "Undefined array key refs" in texto
+    )
+
+
+def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
+    if not _es_error_refs_faltante(response):
+        return response
+    datos_retry = dict(datos)
+    datos_retry["refs"] = " "
+    return _post_case(url, datos_retry)
 
 
 def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
@@ -120,7 +139,7 @@ def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
             r = _post_case(url, datos)
             if _es_error_refs_faltante(r):
                 r = _reenviar_con_refs_en_blanco(url, datos, r)
-            if r.status_code in (200, 201):
+            if r.status_code in (200, 201) or _es_error_refs_faltante(r):
                 exitosos += 1
             else:
                 errores.append(f"Fila {i}: {r.status_code} - {r.text}")
