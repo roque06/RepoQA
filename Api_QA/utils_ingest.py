@@ -1,31 +1,30 @@
 # utils_ingest.py
 # ---------------------------------------------
-# Extracción de texto desde adjuntos para usar como contexto en la generación
-# - PDF:     PyMuPDF (texto nativo) + OCR por página con Tesseract si no hay texto
-# - DOCX:    python-docx
-# - TXT/CSV: decodificación estándar
-# - XLSX:    pandas -> CSV
-# - IMAGEN:  OCR con Tesseract
+# Extracción y estructuración de texto desde adjuntos para usar como contexto
+# en la generación de escenarios QA.
+# - Preserva secciones y tablas cuando es posible.
+# - Segmenta documentos grandes antes de consolidarlos.
+# - Expone metadatos útiles para trazabilidad.
 # ---------------------------------------------
 
-import io
+from __future__ import annotations
+
 import csv
 import hashlib
+import io
 import platform
+import re
 import shutil
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
-import pandas as pd
 import fitz  # PyMuPDF
+import pandas as pd
 
-# ===== OCR (Tesseract) =====
 try:
     from PIL import Image
     import pytesseract
 
-    # Config multiplataforma: en Windows fijamos ruta; en Linux/Mac usamos PATH
     if platform.system() == "Windows":
-        # Cambia esta ruta si instalaste Tesseract en otro lugar
         pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
     elif shutil.which("tesseract"):
         pytesseract.pytesseract.tesseract_cmd = shutil.which("tesseract")
@@ -36,7 +35,6 @@ except Exception:
     Image = None
     pytesseract = None
 
-# ===== Extractores auxiliares =====
 try:
     import docx  # python-docx
 except Exception:
@@ -47,126 +45,188 @@ SUPPORTED_IMAGES = {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".tif"}
 
 
 def _ext(name: str) -> str:
-    i = name.rfind(".")
-    return name[i:].lower() if i != -1 else ""
+    idx = name.rfind(".")
+    return name[idx:].lower() if idx != -1 else ""
 
 
-def _sha1_8(b: bytes) -> str:
-    return hashlib.sha1(b).hexdigest()[:8]
+def _sha1_8(blob: bytes) -> str:
+    return hashlib.sha1(blob).hexdigest()[:8]
 
 
 def _ocr_image_bytes(img_bytes: bytes, lang: str = "spa+eng") -> str:
     if not _OCR_OK:
         return ""
-    im = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-    return (pytesseract.image_to_string(im, lang=lang) or "").strip()
+    image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+    return (pytesseract.image_to_string(image, lang=lang) or "").strip()
 
 
-# ---------------- PDF ----------------
-def _from_pdf(b: bytes, lang: str = "spa+eng") -> str:
-    """
-    Extrae texto de PDF. Si una página no tiene texto (PDF escaneado), hace OCR de la página.
-    """
+def _normalize_text_block(texto: str) -> str:
+    if not isinstance(texto, str):
+        return ""
+    texto = texto.replace("\xa0", " ")
+    texto = re.sub(r"\r\n?", "\n", texto)
+    texto = re.sub(r"\n{3,}", "\n\n", texto)
+    return texto.strip()
+
+
+def _mark_tables(lines: List[str]) -> List[str]:
+    formatted: List[str] = []
+    for line in lines:
+        normalized = " ".join(line.split())
+        if normalized.count("|") >= 2:
+            formatted.append(f"[TABLA] {normalized}")
+        elif re.search(r"\b(columna|campo|valor|descripci[oó]n|importe)\b", normalized, re.IGNORECASE) and "," in normalized:
+            formatted.append(f"[TABLA] {normalized}")
+        else:
+            formatted.append(line.strip())
+    return formatted
+
+
+def preserve_document_structure(texto: str) -> str:
+    texto = _normalize_text_block(texto)
+    if not texto:
+        return ""
+
+    lines = [line.strip() for line in texto.split("\n") if line.strip()]
+    lines = _mark_tables(lines)
+    structured: List[str] = []
+
+    for line in lines:
+        if re.match(r"^(?:#{1,6}\s+.+|\d+(?:\.\d+)*\s+.+)$", line):
+            structured.append(f"\n[linea_seccion] {line}")
+        elif line.endswith(":") and len(line) < 120:
+            structured.append(f"\n[linea_seccion] {line}")
+        else:
+            structured.append(line)
+
+    return "\n".join(structured).strip()
+
+
+def segment_document_text(texto: str, max_chars: int = 12000, overlap: int = 600) -> List[str]:
+    normalized = preserve_document_structure(texto)
+    if not normalized:
+        return []
+    if len(normalized) <= max_chars:
+        return [normalized]
+
+    paragraphs = [part.strip() for part in re.split(r"\n{2,}", normalized) if part.strip()]
+    segments: List[str] = []
+    current = ""
+
+    for paragraph in paragraphs:
+        block = f"{current}\n\n{paragraph}".strip() if current else paragraph
+        if len(block) <= max_chars:
+            current = block
+            continue
+        if current:
+            segments.append(current)
+        if len(paragraph) <= max_chars:
+            current = paragraph
+            continue
+        start = 0
+        while start < len(paragraph):
+            end = min(len(paragraph), start + max_chars)
+            segments.append(paragraph[start:end].strip())
+            if end >= len(paragraph):
+                break
+            start = max(0, end - overlap)
+        current = ""
+
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _from_pdf(blob: bytes, lang: str = "spa+eng") -> str:
     try:
-        doc = fitz.open(stream=b, filetype="pdf")
+        doc = fitz.open(stream=blob, filetype="pdf")
     except Exception:
         return ""
 
-    partes = []
-    for page in doc:
-        txt = page.get_text("text") or ""
-        if not txt.strip():
-            # Render x2 para mejorar OCR
+    pages: List[str] = []
+    for page_index, page in enumerate(doc, start=1):
+        text = page.get_text("text") or ""
+        if not text.strip():
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-            ocr_txt = _ocr_image_bytes(pix.tobytes("png"), lang=lang)
-            txt = ocr_txt or ""
-        if txt.strip():
-            partes.append(txt.strip())
+            text = _ocr_image_bytes(pix.tobytes("png"), lang=lang) or ""
+        text = _normalize_text_block(text)
+        if text:
+            pages.append(f"[Página {page_index}]\n{text}")
     doc.close()
+    return "\n\n".join(pages).strip()
 
-    return "\n".join(partes).strip()
 
-
-# ---------------- DOCX ----------------
-def _from_docx(b: bytes) -> str:
+def _from_docx(blob: bytes) -> str:
     if docx is None:
         return ""
     try:
-        d = docx.Document(io.BytesIO(b))
-
-        partes = []
-        # Párrafos
-        partes.extend(
-            [p.text.strip() for p in d.paragraphs if p.text and p.text.strip()]
-        )
-        # Tablas: fila por fila
-        for t in d.tables:
-            for row in t.rows:
-                celdas = []
-                for cell in row.cells:
-                    txt = " ".join(cell.text.split())
-                    if txt:
-                        celdas.append(txt)
-                if celdas:
-                    partes.append(" | ".join(celdas))
-
-        return "\n".join(partes).strip()
+        document = docx.Document(io.BytesIO(blob))
     except Exception:
         return ""
 
+    parts: List[str] = []
+    for paragraph in document.paragraphs:
+        text = " ".join(paragraph.text.split())
+        if text:
+            parts.append(text)
 
-# ---------------- TXT ----------------
-def _from_txt(b: bytes) -> str:
+    for table in document.tables:
+        for row in table.rows:
+            row_cells = []
+            for cell in row.cells:
+                text = " ".join(cell.text.split())
+                if text:
+                    row_cells.append(text)
+            if row_cells:
+                parts.append(" | ".join(row_cells))
+
+    return "\n".join(parts).strip()
+
+
+def _from_txt(blob: bytes) -> str:
     try:
-        return b.decode("utf-8", errors="ignore").strip()
+        return blob.decode("utf-8", errors="ignore").strip()
     except Exception:
-        return b.decode("latin-1", errors="ignore").strip()
+        return blob.decode("latin-1", errors="ignore").strip()
 
 
-# ---------------- CSV ----------------
-def _from_csv(b: bytes) -> str:
-    out = []
-    reader = csv.reader(io.StringIO(b.decode("utf-8", errors="ignore")))
-    for i, row in enumerate(reader):
-        out.append(", ".join(row))
-        if i >= 2000:
-            out.append("... (truncado)")
+def _from_csv(blob: bytes) -> str:
+    output: List[str] = []
+    reader = csv.reader(io.StringIO(blob.decode("utf-8", errors="ignore")))
+    for row_index, row in enumerate(reader, start=1):
+        output.append(f"[Fila {row_index}] " + " | ".join(cell.strip() for cell in row))
+        if row_index >= 2000:
+            output.append("... (truncado)")
             break
-    return "\n".join(out)
+    return "\n".join(output)
 
 
-# ---------------- XLSX ----------------
-def _from_xlsx(b: bytes) -> str:
+def _from_xlsx(blob: bytes) -> str:
     try:
-        with io.BytesIO(b) as bio:
+        with io.BytesIO(blob) as bio:
             sheets = pd.read_excel(bio, sheet_name=None)
-        chunks = []
-        for name, df in sheets.items():
-            chunks.append(f"--- Hoja: {name} ---")
-            chunks.append(df.to_csv(index=False))
-        txt = "\n".join(chunks)
-        return txt[:300_000] + ("... (truncado)" if len(txt) > 300_000 else "")
     except Exception:
         return ""
 
+    chunks: List[str] = []
+    for sheet_name, dataframe in sheets.items():
+        chunks.append(f"[Hoja] {sheet_name}")
+        chunks.append(dataframe.to_csv(index=False))
+    text = "\n\n".join(chunks)
+    return text[:300000] + ("... (truncado)" if len(text) > 300000 else "")
 
-# ---------------- Imagen (OCR) ----------------
-def _from_image(b: bytes, lang: str = "spa+eng") -> str:
+
+def _from_image(blob: bytes, lang: str = "spa+eng") -> str:
     if not _OCR_OK:
         return ""
     try:
-        img = Image.open(io.BytesIO(b)).convert("RGB")
-        return (pytesseract.image_to_string(img, lang=lang) or "").strip()
+        image = Image.open(io.BytesIO(blob)).convert("RGB")
     except Exception:
         return ""
+    return (pytesseract.image_to_string(image, lang=lang) or "").strip()
 
 
-# ================= API pública =================
 def extract_attachment(name: str, content: bytes) -> Tuple[str, Dict]:
-    """
-    Devuelve (texto_extraído, metadatos)
-    metadatos = { filename, ext, size_bytes, sha1_8, chars }
-    """
     ext = _ext(name)
     text = ""
 
@@ -184,42 +244,44 @@ def extract_attachment(name: str, content: bytes) -> Tuple[str, Dict]:
     elif ext in SUPPORTED_IMAGES:
         text = _from_image(content)
 
+    structured_text = preserve_document_structure(text)
+    segments = segment_document_text(structured_text) if structured_text else []
     meta = {
         "filename": name,
         "ext": ext,
         "size_bytes": len(content),
         "sha1_8": _sha1_8(content),
-        "chars": len(text),
+        "chars": len(structured_text),
+        "segments": len(segments),
     }
-    return text, meta
+    return structured_text, meta
 
 
-def consolidate_attachments(
-    files: List[Tuple[str, bytes]], max_chars: int = 200_000
-) -> Tuple[str, List[Dict]]:
-    """
-    Concatena el texto de múltiples adjuntos con encabezados por fuente y
-    corta a max_chars.
-    """
+def consolidate_attachments(files: List[Tuple[str, bytes]], max_chars: int = 200000) -> Tuple[str, List[Dict]]:
     parts: List[str] = []
     metas: List[Dict] = []
-    total = 0
+    current_len = 0
 
     for name, content in files:
         text, meta = extract_attachment(name, content)
-        metas.append(meta)  # guardamos meta aunque no haya texto
-
+        metas.append(meta)
         if not text:
             continue
 
-        block = f"\n\n### Fuente: {name} ({meta['sha1_8']})\n{text}"
-        if total + len(block) > max_chars:
-            block = block[: max(0, max_chars - total)] + "\n... (truncado)"
+        segments = segment_document_text(text)
+        for segment_index, segment in enumerate(segments, start=1):
+            header = (
+                f"\n\n### Fuente: {name} ({meta['sha1_8']})"
+                f"\n### Segmento: {segment_index}/{len(segments)}"
+            )
+            block = f"{header}\n{segment}".strip()
+            if current_len + len(block) > max_chars:
+                remaining = max(0, max_chars - current_len)
+                if remaining > 0:
+                    parts.append(block[:remaining] + "\n... (truncado)")
+                return "".join(parts).strip(), metas
             parts.append(block)
-            break
-
-        parts.append(block)
-        total += len(block)
+            current_len += len(block)
 
     return "".join(parts).strip(), metas
 
