@@ -84,8 +84,12 @@ from utils_gemini import (
 )
 from qa_engine import (
     analyze_document_structure,
+    estimate_scenario_volume,
     parse_gemini_json_response,
+    prepare_extended_export,
+    prepare_testrail_export,
     summarize_analysis_for_prompt,
+    scenarios_dataframe_to_csv,
     validate_and_prepare_scenarios,
 )
 
@@ -959,6 +963,7 @@ button[kind="secondary"]:hover{
                     with st.spinner("🧠 Analizando documento…"):
                         analisis_documento = analyze_document_structure(texto_entrada)
                         descripcion_refinada = summarize_analysis_for_prompt(analisis_documento)
+                        min_cases, target_cases = estimate_scenario_volume(texto_entrada, analisis_documento)
                     st.session_state["descripcion_refinada"] = descripcion_refinada
                     st.session_state["analisis_documento"] = analisis_documento
 
@@ -972,8 +977,8 @@ button[kind="secondary"]:hover{
                                 prompt_generar_escenarios_profesionales(
                                     descripcion_refinada,
                                     contexto_original=texto_entrada,
-                                    target_cases=_estimar_rango_casos(texto_entrada)[1],
-                                    min_cases=_estimar_rango_casos(texto_entrada)[0],
+                                    target_cases=target_cases,
+                                    min_cases=min_cases,
                                     titulos_excluir=[],
                                     analisis_documento=analisis_documento,
                                 )
@@ -987,7 +992,7 @@ button[kind="secondary"]:hover{
 
                             try:
                                 payload = parse_gemini_json_response(respuesta_modelo_raw)
-                                df_it, metadata_validacion = validate_and_prepare_scenarios(payload)
+                                df_it, metadata_validacion = validate_and_prepare_scenarios(payload, analysis=analisis_documento)
                             except Exception:
                                 if intento < MAX_REINTENTOS:
                                     continue
@@ -1099,6 +1104,8 @@ button[kind="secondary"]:hover{
             # Guardar estado de edición (sin la columna ✓)
             df_sin_check = edited_unified.drop(columns=["✓"], errors="ignore")
             st.session_state.df_editable = df_sin_check
+            df_export_tr = prepare_testrail_export(df_sin_check)
+            df_export_ext = prepare_extended_export(df_sin_check)
 
             # Estadística de selección
             sel_mask = edited_unified["✓"] == True
@@ -1121,6 +1128,26 @@ button[kind="secondary"]:hover{
                     df_sin_check["Estado"] = "Listo"
                     st.session_state.df_editable = df_sin_check
                     st.success("Todos los escenarios marcados como listos.")
+
+            dl1, dl2, _dl3 = st.columns([2, 2, 3])
+            with dl1:
+                st.download_button(
+                    "⬇️ Exportar CSV TestRail",
+                    data=scenarios_dataframe_to_csv(df_export_tr, extended=False),
+                    file_name="escenarios_testrail.csv",
+                    mime="text/csv",
+                    key="btn_download_testrail_csv",
+                    use_container_width=True,
+                )
+            with dl2:
+                st.download_button(
+                    "⬇️ Exportar CSV extendido",
+                    data=scenarios_dataframe_to_csv(df_export_ext, extended=True),
+                    file_name="escenarios_extendido.csv",
+                    mime="text/csv",
+                    key="btn_download_extended_csv",
+                    use_container_width=True,
+                )
 
             # ══════════════════════════════════════════════════════════
             # STEP 5 — TESTRAIL
@@ -1223,7 +1250,7 @@ button[kind="secondary"]:hover{
                                 with cb1:
                                     if st.button("✅ Confirmar subida", key="t1_btn_confirm"):
                                         with st.spinner("📡 Subiendo casos…"):
-                                            res = enviar_a_testrail(ctx["section_id"], df_subir)
+                                            res = enviar_a_testrail(ctx["section_id"], prepare_testrail_export(df_subir))
                                         st.session_state.pop("t1_confirm", None)
                                         if res["exito"]:
                                             st.session_state["step_actual"] = 5
