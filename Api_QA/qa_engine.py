@@ -322,6 +322,19 @@ def _split_atomic_statements(texto: str) -> List[str]:
     return [item for item in items if len(item) >= 10]
 
 
+def _sanitize_expected_result_text(texto: str) -> str:
+    """
+    Sanitización conservadora para Expected Result: evita recortes agresivos.
+    Solo normaliza espacios/saltos y mantiene el contenido funcional completo.
+    """
+    if not isinstance(texto, str):
+        return ""
+    cleaned = texto.replace("\r\n", "\n").replace("\r", "\n").strip()
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned
+
+
 def _is_measurable_expected_result(texto: str) -> bool:
     txt = (texto or "").lower()
     return any(token in txt for token in ["muestra", "registra", "genera", "rechaza", "bloquea", "calcula", "retorna", "actualiza", "persiste", "notifica", "permite", "cambia el estado", "responde con"])
@@ -360,13 +373,34 @@ def _expected_result_template(title: str, steps: str, scenario_type: str, docume
 def _enhance_expected_result(expected: str, title: str, steps: str, scenario_type: str, analysis: Optional[Dict]) -> str:
     analysis = analysis or {}
     document_type = analysis.get("document_type", "Workflow/Proceso")
-    cleaned = limpiar_texto_qa(expected)
+    cleaned = _sanitize_expected_result_text(expected)
     generic_patterns = [r"^ok$", r"^correcto$", r"^exitoso$", r"^se realiza correctamente$", r"^operación exitosa$"]
     if not cleaned or any(re.fullmatch(pattern, cleaned.lower()) for pattern in generic_patterns) or len(cleaned.split()) < 6:
         return _expected_result_template(title, steps, scenario_type, document_type)
     if not _is_measurable_expected_result(cleaned):
         return _expected_result_template(title, steps, scenario_type, document_type)
     return cleaned
+
+
+def _looks_incomplete_expected_result(texto: str) -> bool:
+    clean = _sanitize_expected_result_text(texto).lower()
+    if not clean:
+        return True
+    short_fragments = {
+        "el sistema",
+        "sistema",
+        "correcto",
+        "ok",
+        "exitoso",
+        "operación exitosa",
+        "la operación es exitosa",
+    }
+    if clean in short_fragments:
+        return True
+    # Casos del estilo "El sistema ..." con muy poca información observable.
+    if re.fullmatch(r"el sistema(?:\s+\w+){0,2}", clean):
+        return True
+    return len(clean.split()) < 6
 
 
 def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = None) -> Tuple[pd.DataFrame, Dict]:
@@ -382,6 +416,8 @@ def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = Non
         scenario_type = _normalize_type(str(raw.get("type", "Funcional")), title, analysis)
         priority = _normalize_priority(str(raw.get("priority", "Media")), title, analysis)
         expected = _enhance_expected_result(str(raw.get("expected_result", "")), title, steps, scenario_type, analysis)
+        if _looks_incomplete_expected_result(expected):
+            expected = _expected_result_template(title, steps, scenario_type, analysis.get("document_type", "Workflow/Proceso"))
         source_basis = limpiar_texto_qa(str(raw.get("source_basis", "explicito"))).lower() or "explicito"
         if source_basis not in {"explicito", "inferido"}:
             source_basis = "inferido" if "infer" in source_basis else "explicito"
@@ -435,7 +471,42 @@ def validate_and_prepare_scenarios(payload: Dict, analysis: Optional[Dict] = Non
     return df, {"accepted": len(df), "dropped": dropped}
 
 
-def prepare_testrail_export(df: pd.DataFrame) -> pd.DataFrame:
+def enforce_expected_results_quality(df: pd.DataFrame, analysis: Optional[Dict] = None) -> pd.DataFrame:
+    """
+    Refuerza Expected Result para evitar salidas incompletas tipo "El sistema".
+    Se puede aplicar sobre DataFrames generados o editados.
+    """
+    analysis = analysis or {}
+    if not isinstance(df, pd.DataFrame) or df.empty:
+        return df
+    out = df.copy()
+    if "Expected Result" not in out.columns:
+        return out
+
+    for idx, row in out.iterrows():
+        title = str(row.get("Title", ""))
+        steps = str(row.get("Steps", ""))
+        scenario_type = _normalize_type(str(row.get("Type", "Funcional")), title, analysis)
+        expected = _sanitize_expected_result_text(str(row.get("Expected Result", "")))
+        if _looks_incomplete_expected_result(expected):
+            out.at[idx, "Expected Result"] = _expected_result_template(
+                title=title,
+                steps=steps,
+                scenario_type=scenario_type,
+                document_type=analysis.get("document_type", "Workflow/Proceso"),
+            )
+        else:
+            out.at[idx, "Expected Result"] = expected
+    return out
+
+
+def build_testrail_export_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Contrato estricto de exportación TestRail:
+    - SOLO columnas permitidas
+    - orden fijo
+    - columnas faltantes se crean vacías
+    """
     export_df = df.copy() if isinstance(df, pd.DataFrame) else pd.DataFrame()
     for column in TESTRAIL_EXPORT_COLUMNS:
         if column not in export_df.columns:
@@ -443,11 +514,19 @@ def prepare_testrail_export(df: pd.DataFrame) -> pd.DataFrame:
     export_df = export_df[TESTRAIL_EXPORT_COLUMNS].copy()
     for column in TESTRAIL_EXPORT_COLUMNS:
         export_df[column] = export_df[column].fillna("").astype(str)
+    # Blindaje final del contrato.
+    if list(export_df.columns) != TESTRAIL_EXPORT_COLUMNS:
+        export_df = export_df.reindex(columns=TESTRAIL_EXPORT_COLUMNS, fill_value="")
     return export_df
 
 
+def prepare_testrail_export(df: pd.DataFrame) -> pd.DataFrame:
+    # Compatibilidad hacia atrás.
+    return build_testrail_export_dataframe(df)
+
+
 def prepare_extended_export(df: pd.DataFrame) -> pd.DataFrame:
-    export_df = prepare_testrail_export(df)
+    export_df = build_testrail_export_dataframe(df)
     for column in INTERNAL_ONLY_COLUMNS:
         if column in df.columns:
             export_df[column] = df[column].fillna("").astype(str)
@@ -455,5 +534,5 @@ def prepare_extended_export(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def scenarios_dataframe_to_csv(df: pd.DataFrame, extended: bool = False) -> str:
-    export_df = prepare_extended_export(df) if extended else prepare_testrail_export(df)
+    export_df = prepare_extended_export(df) if extended else build_testrail_export_dataframe(df)
     return export_df.to_csv(index=False)

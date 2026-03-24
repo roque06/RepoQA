@@ -1,3 +1,4 @@
+import io
 import sys
 import unittest
 from pathlib import Path
@@ -9,11 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from Api_QA.qa_engine import (
     TESTRAIL_EXPORT_COLUMNS,
     analyze_document_structure,
+    build_testrail_export_dataframe,
     classify_document_type,
     estimate_scenario_volume,
     parse_gemini_json_response,
     prepare_extended_export,
     prepare_testrail_export,
+    scenarios_dataframe_to_csv,
+    enforce_expected_results_quality,
     validate_and_prepare_scenarios,
 )
 from Api_QA.utils_ingest import preserve_document_structure, segment_document_text
@@ -124,11 +128,20 @@ class TestQaEngine(unittest.TestCase):
                 }
             ]
         )
-        export_df = prepare_testrail_export(df)
+        export_df = build_testrail_export_dataframe(df)
         self.assertEqual(list(export_df.columns), TESTRAIL_EXPORT_COLUMNS)
         self.assertNotIn("✓", export_df.columns)
         self.assertNotIn("source_basis", export_df.columns)
         self.assertNotIn("assumption", export_df.columns)
+        self.assertNotIn("quality_notes", export_df.columns)
+
+    def test_build_testrail_export_dataframe_enforces_exact_7_columns_contract(self):
+        df = pd.DataFrame([{"Title": "Caso", "Expected Result": "Texto", "Estado": "Pendiente", "extra": "x"}])
+        export_df = build_testrail_export_dataframe(df)
+        self.assertEqual(export_df.shape[1], 7)
+        self.assertEqual(list(export_df.columns), TESTRAIL_EXPORT_COLUMNS)
+        self.assertEqual(export_df.iloc[0]["Preconditions"], "")
+        self.assertEqual(export_df.iloc[0]["Steps"], "")
 
     def test_prepare_extended_export_keeps_traceability_outside_default_mode(self):
         df = pd.DataFrame(
@@ -148,6 +161,90 @@ class TestQaEngine(unittest.TestCase):
         self.assertIn("source_basis", export_df.columns)
         self.assertIn("assumption", export_df.columns)
         self.assertEqual(export_df.iloc[0]["source_basis"], "inferido")
+
+    def test_validate_pipeline_does_not_truncate_expected_result(self):
+        analysis = analyze_document_structure("Workflow de aprobación de solicitudes.")
+        long_expected = (
+            "El sistema actualiza el estado de la solicitud a Aprobada, refleja el cambio en la bandeja del aprobador, "
+            "muestra un mensaje de confirmación visible y persiste la transición para consulta posterior."
+        )
+        payload = {
+            "test_scenarios": [
+                {
+                    "title": "Aprobación de solicitud",
+                    "preconditions": "1. Solicitud en estado pendiente\\n2. Aprobador con permisos",
+                    "steps": "1. Abrir solicitud\\n2. Revisar datos\\n3. Aprobar\\n4. Confirmar operación",
+                    "expected_result": long_expected,
+                    "type": "Funcional",
+                    "priority": "Alta",
+                    "source_basis": "explicito",
+                    "assumption": "",
+                }
+            ]
+        }
+        df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
+        self.assertEqual(df.iloc[0]["Expected Result"], long_expected)
+
+    def test_incomplete_expected_result_is_replaced_with_observable_template(self):
+        analysis = analyze_document_structure("Flujo web de registro y validación de formulario.")
+        payload = {
+            "test_scenarios": [
+                {
+                    "title": "Registro de usuario",
+                    "preconditions": "1. Formulario disponible",
+                    "steps": "1. Completar datos\\n2. Enviar formulario\\n3. Confirmar registro\\n4. Revisar respuesta",
+                    "expected_result": "El sistema",
+                    "type": "Funcional",
+                    "priority": "Alta",
+                }
+            ]
+        }
+        df, _ = validate_and_prepare_scenarios(payload, analysis=analysis)
+        self.assertNotEqual(df.iloc[0]["Expected Result"].strip().lower(), "el sistema")
+        self.assertIn("muestra", df.iloc[0]["Expected Result"].lower())
+
+    def test_enforce_expected_results_quality_on_existing_dataframe(self):
+        analysis = analyze_document_structure("API REST de autenticación con respuesta HTTP.")
+        df = pd.DataFrame(
+            [
+                {
+                    "Title": "Autenticación API",
+                    "Preconditions": "1. Token disponible",
+                    "Steps": "1. Enviar request\\n2. Revisar response",
+                    "Expected Result": "El sistema",
+                    "Type": "Integracion",
+                    "Priority": "Alta",
+                    "Estado": "Pendiente",
+                }
+            ]
+        )
+        fixed = enforce_expected_results_quality(df, analysis=analysis)
+        self.assertIn("código http", fixed.iloc[0]["Expected Result"].lower())
+
+    def test_csv_export_roundtrip_preserves_long_expected_result(self):
+        long_expected = (
+            "El sistema procesa la solicitud completa, refleja el cambio de estado visible, "
+            "muestra un mensaje detallado al usuario final y persiste todos los datos requeridos "
+            "para consultas posteriores sin recortar el contenido funcional esperado."
+        )
+        df = pd.DataFrame(
+            [
+                {
+                    "Title": "Flujo completo",
+                    "Preconditions": "1. Usuario autenticado",
+                    "Steps": "1. Ejecutar acción\\n2. Confirmar operación",
+                    "Expected Result": long_expected,
+                    "Type": "Funcional",
+                    "Priority": "Alta",
+                    "Estado": "Pendiente",
+                    "source_basis": "explicito",
+                    "assumption": "",
+                }
+            ]
+        )
+        csv_text = scenarios_dataframe_to_csv(df, extended=False)
+        parsed = pd.read_csv(io.StringIO(csv_text))
+        self.assertEqual(parsed.iloc[0]["Expected Result"], long_expected)
 
     def test_ingest_helpers_preserve_structure_and_segment(self):
         text = "# Encabezado\nCampo,Valor\nMonto,100\n\n" + ("Detalle operativo. " * 1200)

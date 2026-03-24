@@ -2,6 +2,14 @@ import pandas as pd
 import requests
 import streamlit as st
 
+if __package__:
+    from .qa_engine import build_testrail_export_dataframe
+else:
+    try:
+        from qa_engine import build_testrail_export_dataframe
+    except ModuleNotFoundError:
+        from Api_QA.qa_engine import build_testrail_export_dataframe
+
 # 🔐 Obtener credenciales desde .streamlit/secrets.toml
 TESTRAIL_DOMAIN = st.secrets["testrail_url"]
 TESTRAIL_USER = st.secrets["testrail_email"]
@@ -98,6 +106,11 @@ def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
 
 def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     url = f"{TESTRAIL_DOMAIN}/index.php?/api/v2/add_case/{section_id}"
+    original_df = dataframe.copy()
+    dataframe = build_testrail_export_dataframe(dataframe)
+    for columna_refs in ("refs", "Refs", "Reference", "References"):
+        if columna_refs in original_df.columns:
+            dataframe[columna_refs] = original_df[columna_refs]
     exitosos, errores = 0, []
 
     for i, fila in dataframe.iterrows():
