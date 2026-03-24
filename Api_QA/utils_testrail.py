@@ -115,14 +115,6 @@ def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
     return _post_case(url, datos_retry)
 
 
-def _reenviar_con_refs_en_blanco(url: str, datos: dict, response):
-    if not _es_error_refs_faltante(response):
-        return response
-    datos_retry = dict(datos)
-    datos_retry["refs"] = " "
-    return _post_case(url, datos_retry)
-
-
 def enviar_a_testrail(section_id, dataframe: pd.DataFrame):
     url = f"{TESTRAIL_DOMAIN}/index.php?/api/v2/add_case/{section_id}"
     original_df = dataframe.copy()
