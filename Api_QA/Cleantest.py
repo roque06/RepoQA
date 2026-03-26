@@ -1257,19 +1257,21 @@ button[kind="secondary"]:hover{
                                 cb1, cb2 = st.columns(2)
                                 with cb1:
                                     if st.button("✅ Confirmar subida", key="t1_btn_confirm"):
-                                        with st.spinner("📡 Subiendo casos…"):
-                                            res = enviar_a_testrail(ctx["section_id"], build_testrail_export_dataframe(df_subir))
-                                        st.session_state.pop("t1_confirm", None)
-                                        if res["exito"]:
-                                            st.session_state["step_actual"] = 5
-                                            st.session_state["t1_subido_ok"] = True
-                                            st.success("✅ Casos subidos correctamente a TestRail")
-                                            st.rerun()
-                                        else:
-                                            st.error(f"❌ {res['subidos']} de {res['total']} subidos.")
-                                            if res["detalle"]:
-                                                with st.expander("Ver detalles del error"):
-                                                    for e in res["detalle"]: st.write(e)
+                                        ctx_data = st.session_state.pop("t1_confirm", None)
+                                        if ctx_data:
+                                            with st.spinner("📡 Subiendo casos…"):
+                                                res = enviar_a_testrail(ctx_data["section_id"], build_testrail_export_dataframe(df_subir))
+                                            if res["exito"]:
+                                                st.session_state["step_actual"] = 5
+                                                st.session_state["t1_subido_ok"] = True
+                                                st.session_state["t1_show_testrail"] = False
+                                                st.success("✅ Casos subidos correctamente a TestRail")
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ {res['subidos']} de {res['total']} subidos.")
+                                                if res["detalle"]:
+                                                    with st.expander("Ver detalles del error"):
+                                                        for e in res["detalle"]: st.write(e)
                                 with cb2:
                                     if st.button("❌ Cancelar", key="t1_btn_cancel"):
                                         st.session_state.pop("t1_confirm", None)

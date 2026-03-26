@@ -34,7 +34,7 @@ def _limpiar_texto_ejemplo(texto: str) -> str:
         flags=re.IGNORECASE,
     )
     limpio = re.sub(
-        r"\s*[-,:]?\s*(?:ej(?:emplo)?\.?\s*:?\s*|por ejemplo\s*:?\s*|p\.\s*ej\.?\s*:?\s*)[^;\n]*",
+        r"\s*[-,:]?\s*(?:\bej(?:emplo)?\b\.?\s*:?\s*|\bpor ejemplo\b\s*:?\s*|\bp\.\s*ej\.\s*:?\s*)[^;\n]*",
         "",
         limpio,
         flags=re.IGNORECASE,
