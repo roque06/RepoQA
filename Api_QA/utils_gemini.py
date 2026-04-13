@@ -346,6 +346,28 @@ def _es_cuota_agotada(mensaje_error: str) -> bool:
     return "quota exceeded" in txt or "exceeded your current quota" in txt or "free_tier_input_token_count" in txt
 
 
+def construir_mensaje_error_gemini(error: Exception | str) -> str:
+    """
+    Convierte errores crudos de Gemini en mensajes orientados al usuario final.
+    """
+    raw = str(error or "").strip()
+    txt = raw.lower()
+
+    if "503" in txt and ("high demand" in txt or "unavailable" in txt):
+        return (
+            "Gemini está temporalmente saturado (HTTP 503). "
+            "Intenta de nuevo en 30-90 segundos; el pico de demanda suele ser temporal."
+        )
+
+    if "429" in txt and _es_cuota_agotada(raw):
+        return (
+            "Gemini alcanzó el límite de cuota (HTTP 429). "
+            "Espera unos minutos o cambia la API key/modelo configurado en secrets."
+        )
+
+    return raw or "Ocurrió un error al invocar Gemini."
+
+
 def enviar_a_gemini(prompt_dict, max_intentos=4, espera_inicial=2):
     api_keys = _obtener_api_keys_gemini()
     modelos = _obtener_modelos_gemini()
