@@ -80,7 +80,8 @@ from utils_testrail import (
 )
 from utils_gemini import (
     enviar_a_gemini, extraer_texto_de_respuesta_gemini,
-    prompt_generar_escenarios_profesionales, limitar_texto_para_gemini
+    prompt_generar_escenarios_profesionales, limitar_texto_para_gemini,
+    construir_mensaje_error_gemini
 )
 from qa_engine import (
     analyze_document_structure,
@@ -1035,7 +1036,7 @@ button[kind="secondary"]:hover{
                         )
 
                 except Exception as exc:
-                    st.error(f"❌ Error durante la generación: {exc}")
+                    st.error(f"❌ Error durante la generación: {construir_mensaje_error_gemini(exc)}")
                     if respuesta_modelo_raw:
                         st.text_area("⚠️ Respuesta del modelo que causó error", respuesta_modelo_raw, height=220)
                     st.session_state.df_editable = None
