@@ -17,7 +17,11 @@ import re
 import shutil
 from typing import Dict, List, Tuple
 
-import fitz  # PyMuPDF
+try:
+    import fitz  # PyMuPDF
+except Exception:
+    fitz = None
+
 import pandas as pd
 
 try:
@@ -138,6 +142,9 @@ def segment_document_text(texto: str, max_chars: int = 12000, overlap: int = 600
 
 
 def _from_pdf(blob: bytes, lang: str = "spa+eng") -> str:
+    if fitz is None:
+        return ""
+
     try:
         doc = fitz.open(stream=blob, filetype="pdf")
     except Exception:
