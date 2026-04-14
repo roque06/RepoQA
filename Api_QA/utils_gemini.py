@@ -12,8 +12,17 @@ if __package__:
 else:
     from qa_engine import summarize_analysis_for_prompt
 
+
 SYSTEM_PROMPT_ES = """Eres un Arquitecto QA Senior especializado en transformar documentos heterogéneos en escenarios de prueba profesionales.
 Tu trabajo no es copiar el documento, sino interpretarlo con criterio funcional, técnico y de riesgo para producir cobertura QA útil en un entorno real."""
+
+
+# Modelos definidos localmente, sin depender de secrets.
+# Ajusta el orden según tu preferencia de prioridad.
+MODELOS_GEMINI = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+]
 
 
 def generar_escenarios_desde_contexto(contexto_total: str, metas: Optional[List[Dict]] = None) -> str:
@@ -53,8 +62,8 @@ Devuelve SOLO JSON válido con esta estructura exacta:
   "test_scenarios": [
     {
       "title": "",
-      "preconditions": "1. ...\n2. ...",
-      "steps": "1. ...\n2. ...\n3. ...\n4. ...",
+      "preconditions": "1. ...\\n2. ...",
+      "steps": "1. ...\\n2. ...\\n3. ...\\n4. ...",
       "expected_result": "",
       "type": "Funcional | Validacion | Integracion | Seguridad | Usabilidad",
       "priority": "Alta | Media | Baja",
@@ -78,7 +87,11 @@ def prompt_generar_escenarios_profesionales(
     contexto_original = limitar_texto_para_gemini(contexto_original or "", max_chars=12000)
     analisis_documento = analisis_documento or {}
     document_type = analisis_documento.get("document_type", "Workflow/Proceso")
-    analysis_summary = summarize_analysis_for_prompt(analisis_documento) if analisis_documento else "- No se recibió análisis estructurado."
+    analysis_summary = (
+        summarize_analysis_for_prompt(analisis_documento)
+        if analisis_documento
+        else "- No se recibió análisis estructurado."
+    )
     functional_blocks = analisis_documento.get("functional_blocks", []) if analisis_documento else []
     volume = analisis_documento.get("scenario_volume", {}) if analisis_documento else {}
 
@@ -242,6 +255,7 @@ def invocar_con_reintento(prompt, max_intentos=3, espera_inicial=2):
 
 def _obtener_api_keys_gemini():
     keys = []
+
     key_unica = st.secrets.get("gemini_api_key", "")
     if isinstance(key_unica, str) and key_unica.strip():
         keys.append(key_unica.strip())
@@ -260,34 +274,27 @@ def _obtener_api_keys_gemini():
         if key not in seen:
             seen.add(key)
             dedup.append(key)
+
     if not dedup:
         raise ValueError("No hay gemini_api_key configurada en .streamlit/secrets.toml.")
+
     return dedup
 
 
 def _obtener_modelos_gemini():
-    modelos = []
-    modelo_unico = st.secrets.get("gemini_model", "")
-    if isinstance(modelo_unico, str) and modelo_unico.strip():
-        modelos.append(modelo_unico.strip())
-
-    modelos_multiples = st.secrets.get("gemini_models", [])
-    if isinstance(modelos_multiples, str):
-        modelos_multiples = [modelo.strip() for modelo in modelos_multiples.split(",") if modelo.strip()]
-    if isinstance(modelos_multiples, list):
-        for modelo in modelos_multiples:
-            if isinstance(modelo, str) and modelo.strip():
-                modelos.append(modelo.strip())
-
-    if not modelos:
-        modelos = ["gemini-2.5-flash", "gemini-2.0-flash"]
-
     dedup = []
     seen = set()
-    for modelo in modelos:
-        if modelo not in seen:
-            seen.add(modelo)
-            dedup.append(modelo)
+
+    for modelo in MODELOS_GEMINI:
+        if isinstance(modelo, str) and modelo.strip():
+            m = modelo.strip()
+            if m not in seen:
+                seen.add(m)
+                dedup.append(m)
+
+    if not dedup:
+        dedup = ["gemini-2.5-flash", "gemini-2.0-flash"]
+
     return dedup
 
 
@@ -307,25 +314,34 @@ def _parsear_error_http(response):
         err = payload.get("error", {}) if isinstance(payload, dict) else {}
         mensaje = str(err.get("message", "")).strip()
         details = err.get("details", [])
+
         if isinstance(details, list):
             for item in details:
                 if not isinstance(item, dict):
                     continue
+
                 if not razon:
                     razon = str(item.get("reason", "")).strip()
+
                 metadata = item.get("metadata", {})
                 if isinstance(metadata, dict) and not metrica:
-                    metrica = str(metadata.get("quota_metric", "")).strip() or str(metadata.get("metric", "")).strip()
+                    metrica = (
+                        str(metadata.get("quota_metric", "")).strip()
+                        or str(metadata.get("metric", "")).strip()
+                    )
+
                 tipo = str(item.get("@type", "")).strip()
                 if "RetryInfo" in tipo and retry_seconds is None:
                     retry_delay = str(item.get("retryDelay", "")).strip()
                     match = re.search(r"(\d+(?:\.\d+)?)s", retry_delay)
                     if match:
                         retry_seconds = max(1, int(round(float(match.group(1)))))
+
         if mensaje and not metrica:
             match = re.search(r"Quota exceeded for metric:\s*([^,\s]+)", mensaje)
             if match:
                 metrica = match.group(1)
+
         if retry_seconds is None and mensaje:
             match = re.search(r"Please retry in\s+(\d+(?:\.\d+)?)s", mensaje, flags=re.IGNORECASE)
             if match:
@@ -343,7 +359,11 @@ def _parsear_error_http(response):
 
 def _es_cuota_agotada(mensaje_error: str) -> bool:
     txt = (mensaje_error or "").lower()
-    return "quota exceeded" in txt or "exceeded your current quota" in txt or "free_tier_input_token_count" in txt
+    return (
+        "quota exceeded" in txt
+        or "exceeded your current quota" in txt
+        or "free_tier_input_token_count" in txt
+    )
 
 
 def construir_mensaje_error_gemini(error: Exception | str) -> str:
@@ -353,7 +373,7 @@ def construir_mensaje_error_gemini(error: Exception | str) -> str:
     raw = str(error or "").strip()
     txt = raw.lower()
 
-    if "503" in txt and ("high demand" in txt or "unavailable" in txt):
+    if "503" in txt and ("high demand" in txt or "unavailable" in txt or "temporarily unavailable" in txt):
         return (
             "Gemini está temporalmente saturado (HTTP 503). "
             "Intenta de nuevo en 30-90 segundos; el pico de demanda suele ser temporal."
@@ -362,7 +382,7 @@ def construir_mensaje_error_gemini(error: Exception | str) -> str:
     if "429" in txt and _es_cuota_agotada(raw):
         return (
             "Gemini alcanzó el límite de cuota (HTTP 429). "
-            "Espera unos minutos o cambia la API key/modelo configurado en secrets."
+            "Espera unos minutos o cambia la API key disponible."
         )
 
     return raw or "Ocurrió un error al invocar Gemini."
@@ -376,14 +396,18 @@ def enviar_a_gemini(prompt_dict, max_intentos=4, espera_inicial=2):
 
     for modelo in modelos:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent"
+
         for idx_key, api_key in enumerate(api_keys, start=1):
             headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
+
             for intento in range(1, max_intentos + 1):
                 response = None
+
                 try:
                     response = requests.post(url, headers=headers, json=prompt_dict, timeout=60)
                     response.raise_for_status()
                     return response.json()
+
                 except requests.exceptions.HTTPError as exc:
                     status, mensaje, razon, metrica, detalle, retry_seconds = _parsear_error_http(response)
                     ultimo_intento = intento == max_intentos
@@ -391,32 +415,60 @@ def enviar_a_gemini(prompt_dict, max_intentos=4, espera_inicial=2):
                     hay_mas_modelos = modelo != modelos[-1]
 
                     if razon == "API_KEY_INVALID" or "api key expired" in mensaje.lower():
-                        ultimo_error = f"Error HTTP {status}: API key invalida/expirada. Modelo: {modelo}. Detalle: {detalle}"
+                        ultimo_error = (
+                            f"Error HTTP {status}: API key invalida/expirada. "
+                            f"Modelo: {modelo}. Detalle: {detalle}"
+                        )
                         if hay_mas_keys:
-                            st.warning(f"API key {idx_key}/{len(api_keys)} invalida o expirada. Probando siguiente key...")
+                            st.warning(
+                                f"API key {idx_key}/{len(api_keys)} invalida o expirada. "
+                                f"Probando siguiente key..."
+                            )
+                            break
+                        if hay_mas_modelos:
+                            st.warning(
+                                f"Modelo {modelo} no usable con la key actual. "
+                                f"Probando siguiente modelo..."
+                            )
                             break
                         raise ValueError(f"Error HTTP al invocar Gemini ({status}): {mensaje}") from exc
 
                     if status == 429 and _es_cuota_agotada(mensaje):
                         if not ultimo_intento and retry_seconds:
                             st.warning(
-                                f"Gemini alcanzó límite temporal de cuota ({metrica or 'quota'}). Reintentando en {retry_seconds}s..."
+                                f"Gemini alcanzó límite temporal de cuota ({metrica or 'quota'}). "
+                                f"Reintentando en {retry_seconds}s..."
                             )
                             time.sleep(retry_seconds)
                             continue
-                        ultimo_error = f"Error HTTP 429: cuota agotada. Métrica: {metrica or 'desconocida'}. Modelo: {modelo}."
+
+                        ultimo_error = (
+                            f"Error HTTP 429: cuota agotada. "
+                            f"Métrica: {metrica or 'desconocida'}. Modelo: {modelo}."
+                        )
+
                         if hay_mas_keys:
-                            st.warning(f"Cuota agotada en key {idx_key}/{len(api_keys)} (modelo {modelo}). Probando siguiente key...")
+                            st.warning(
+                                f"Cuota agotada en key {idx_key}/{len(api_keys)} "
+                                f"(modelo {modelo}). Probando siguiente key..."
+                            )
                             break
+
                         if hay_mas_modelos:
-                            st.warning(f"Cuota agotada en modelo {modelo}. Probando siguiente modelo...")
+                            st.warning(
+                                f"Cuota agotada en modelo {modelo}. "
+                                f"Probando siguiente modelo..."
+                            )
                             break
+
                         raise ValueError(
-                            f"Error HTTP al invocar Gemini (429): cuota agotada. Métrica: {metrica or 'desconocida'}. Mensaje: {mensaje}"
+                            f"Error HTTP al invocar Gemini (429): cuota agotada. "
+                            f"Métrica: {metrica or 'desconocida'}. Mensaje: {mensaje}"
                         ) from exc
 
                     if status in estados_reintentables and not ultimo_intento:
                         retry_after = response.headers.get("Retry-After") if response is not None else None
+
                         if retry_after:
                             try:
                                 espera = max(1, int(round(float(retry_after))))
@@ -426,25 +478,66 @@ def enviar_a_gemini(prompt_dict, max_intentos=4, espera_inicial=2):
                             espera = retry_seconds
                         else:
                             espera = espera_inicial * (2 ** (intento - 1))
+
                         st.warning(
                             f"Gemini devolvió {status}. Reintentando en {espera}s "
-                            f"(intento {intento}/{max_intentos}, key {idx_key}/{len(api_keys)}, modelo {modelo})..."
+                            f"(intento {intento}/{max_intentos}, "
+                            f"key {idx_key}/{len(api_keys)}, modelo {modelo})..."
                         )
                         time.sleep(espera)
                         continue
 
-                    raise ValueError(f"Error HTTP al invocar Gemini ({status}): {mensaje or exc}. Detalle: {detalle}") from exc
+                    if status in {500, 502, 503, 504}:
+                        ultimo_error = (
+                            f"Error HTTP {status} en modelo {modelo}. "
+                            f"Mensaje: {mensaje or detalle}"
+                        )
+
+                        if hay_mas_keys:
+                            st.warning(
+                                f"Gemini devolvió {status} con la key {idx_key}/{len(api_keys)} "
+                                f"en modelo {modelo}. Probando siguiente key..."
+                            )
+                            break
+
+                        if hay_mas_modelos:
+                            st.warning(
+                                f"Gemini devolvió {status} en modelo {modelo}. "
+                                f"Probando siguiente modelo..."
+                            )
+                            break
+
+                    raise ValueError(
+                        f"Error HTTP al invocar Gemini ({status}): {mensaje or exc}. "
+                        f"Detalle: {detalle}"
+                    ) from exc
+
                 except requests.exceptions.Timeout:
                     if intento < max_intentos:
                         espera = espera_inicial * (2 ** (intento - 1))
                         st.warning(
                             f"Timeout al invocar Gemini. Reintentando en {espera}s "
-                            f"(intento {intento}/{max_intentos}, key {idx_key}/{len(api_keys)}, modelo {modelo})..."
+                            f"(intento {intento}/{max_intentos}, "
+                            f"key {idx_key}/{len(api_keys)}, modelo {modelo})..."
                         )
                         time.sleep(espera)
                         continue
-                    ultimo_error = "Timeout al invocar Gemini tras varios intentos."
+
+                    ultimo_error = f"Timeout al invocar Gemini tras varios intentos en modelo {modelo}."
+                    if idx_key < len(api_keys):
+                        st.warning(
+                            f"Timeout persistente con key {idx_key}/{len(api_keys)} "
+                            f"en modelo {modelo}. Probando siguiente key..."
+                        )
+                        break
+                    if modelo != modelos[-1]:
+                        st.warning(
+                            f"Timeout persistente en modelo {modelo}. "
+                            f"Probando siguiente modelo..."
+                        )
+                        break
                     break
+
                 except Exception as exc:
                     raise ValueError(f"Error general al invocar Gemini: {exc}") from exc
 
@@ -481,10 +574,13 @@ def prompt_refinar_descripcion(texto_funcional):
 
 def obtener_descripcion_refinada(texto_funcional, max_intentos=3):
     texto_ajustado = limitar_texto_para_gemini(texto_funcional, max_chars=18000)
+
     if texto_funcional and len(texto_ajustado) < len(texto_funcional):
         st.warning(
-            "⚠️ El texto de entrada es muy largo para la cuota actual. Se envió una versión recortada para reducir consumo de tokens."
+            "⚠️ El texto de entrada es muy largo para la cuota actual. "
+            "Se envió una versión recortada para reducir consumo de tokens."
         )
+
     intentos = 0
     while intentos < max_intentos:
         respuesta_estructurada = enviar_a_gemini(prompt_refinar_descripcion(texto_ajustado))
@@ -493,4 +589,5 @@ def obtener_descripcion_refinada(texto_funcional, max_intentos=3):
             return descripcion_refinada
         intentos += 1
         time.sleep(1)
+
     raise ValueError("Gemini no devolvió descripción válida tras varios intentos.")
